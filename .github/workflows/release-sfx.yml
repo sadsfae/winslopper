@@ -61,16 +61,14 @@ jobs:
           if ($expected -ne $actual) { throw "SHA-256 mismatch: expected $expected got $actual" }
           Write-Host "llama.zip verified (sha256 $actual)"
 
-      - name: Fetch 7-Zip SFX tooling
+      - name: Verify bundled 7-Zip SFX tooling
         shell: pwsh
         run: |
-          Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/ip7z/7zip/releases/download/26.02/7zr.exe" -OutFile 7zr.exe
-          Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/ip7z/7zip/releases/download/26.02/7z2602-extra.7z" -OutFile extra.7z
-          .\7zr.exe x extra.7z -o7zip -y | Out-Null
-          $sfx = Get-ChildItem -Recurse 7zip -Filter 7zCon.sfx | Select-Object -First 1
-          if (-not $sfx) { throw "7zCon.sfx not found in 7-Zip extra package" }
-          Copy-Item $sfx.FullName .\7zCon.sfx
-          Write-Host "7zr.exe and 7zCon.sfx ready"
+          $files = Get-Item tools\7z\7zr.exe, tools\7z\7zS2con.sfx
+          $files | ForEach-Object {
+            $h = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
+            Write-Host "$h  $($_.Name)"
+          }
 
       - name: Stage payload
         shell: pwsh
@@ -85,7 +83,7 @@ jobs:
         shell: pwsh
         run: |
           Push-Location staging
-          ..\7zr.exe a ..\payload.7z * -y | Out-Null
+          ..\tools\7z\7zr.exe a ..\payload.7z * -y | Out-Null
           Pop-Location
           $cfg = @(
             ';!@Install@!UTF-8!',
@@ -96,7 +94,7 @@ jobs:
           )
           $cfg | Out-File config.txt -Encoding ascii
           $exeName = "winslopper-setup-${{ github.ref_name }}.exe"
-          cmd /c "copy /b 7zCon.sfx + config.txt + payload.7z $exeName > nul"
+          cmd /c "copy /b tools\7z\7zS2con.sfx + config.txt + payload.7z $exeName > nul"
           if (-not (Test-Path $exeName)) { throw "failed to assemble $exeName" }
           $hash = (Get-FileHash $exeName -Algorithm SHA256).Hash
           "$hash  $exeName" | Out-File SHA256SUMS.txt -Encoding ascii
