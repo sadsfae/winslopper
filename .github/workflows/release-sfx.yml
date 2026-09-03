@@ -1,4 +1,4 @@
-name: Release SFX installer
+name: Release installer
 
 # Builds a self-extracting Windows EXE (via the Windows built-in IExpress
 # self-extractor) and publishes it to the release.
@@ -92,7 +92,7 @@ jobs:
           Copy-Item tools\run-setup.cmd staging\run-setup.cmd
           Get-ChildItem staging | Select-Object Name, Length
 
-      - name: Build SFX installer (IExpress)
+      - name: Build installer (IExpress)
         shell: pwsh
         timeout-minutes: 10
         run: |
