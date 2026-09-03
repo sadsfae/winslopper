@@ -64,7 +64,7 @@
 
 .PARAMETER InstallDir
     Persistent install directory. Defaults to the script's own folder. The
-    self-extracting release EXE passes %USERPROFILE%\winslopper_RTX5090TI,
+    self-extracting release EXE passes %USERPROFILE%\winslopper,
     because the installer extracts to a temp directory that is deleted afterwards.
 
 .PARAMETER Force
