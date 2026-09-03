@@ -138,8 +138,13 @@ Compared to Open WebUI it is intentionally simpler: single user, no accounts, hi
 ## Firewall
 
 - The server binds `0.0.0.0:8081`. For localhost use no rule is needed.
-- To reach it from other machines, run setup from an elevated PowerShell so the inbound TCP 8081 rule is created.
-- CORS is all-origin and no API key is set, same as the Linux side.
+- The release EXE installs unelevated, so setup does not create the inbound rule. The folder-based setup creates it only when run from an elevated PowerShell.
+- To reach the server from other machines on your LAN, run this once in an elevated PowerShell (right-click > Run as administrator):
+  ```powershell
+  New-NetFirewallRule -DisplayName "llama-server TCP 8081" -Direction Inbound -Protocol TCP -LocalPort 8081 -Action Allow -Profile Private
+  ```
+  Then test from another machine with `Test-NetConnection <host-ip> -Port 8081`. If it still fails, check your router's AP/client isolation.
+- No authentication and no API key: any client that can reach port 8081 can use the router and the web chat. Keep the rule scoped to a trusted network (the Private profile above).
 
 ## systemd mapping
 
