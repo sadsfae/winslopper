@@ -1,8 +1,10 @@
-# winslopper_RTX5090TI
+# winslopper
 
-[![Build](https://github.com/sadsfae/winslopper_RTX5090TI/actions/workflows/release-sfx.yml/badge.svg)](https://github.com/sadsfae/winslopper_RTX5090TI/actions/workflows/release-sfx.yml)
-[![Release](https://img.shields.io/github/v/release/sadsfae/winslopper_RTX5090TI)](https://github.com/sadsfae/winslopper_RTX5090TI/releases/latest)
+[![Build](https://github.com/sadsfae/winslopper/actions/workflows/release-sfx.yml/badge.svg)](https://github.com/sadsfae/winslopper/actions/workflows/release-sfx.yml)
+[![Release](https://img.shields.io/github/v/release/sadsfae/winslopper)](https://github.com/sadsfae/winslopper/releases/latest)
 [![Windows](https://img.shields.io/badge/Windows-10%2B-0078D6?logo=windows&logoColor=white)](https://learn.microsoft.com/en-us/powershell/)
+
+> Targets an NVIDIA RTX 3090 TI only. The repository was originally named "winslopper_RTX5090TI"; the "5090" was a typo.
 
 Windows port of natureboy's llama.cpp router setup (systemd unit + router preset + Qwen chat template). Runs the llama.cpp router on port 8081 with the same `router-config.ini` and `qwen-fixed.jinja`, controlled from a small PowerShell menu in a normal console window. No service, no auto-start: you run it on demand, and closing the window stops the server.
 
@@ -27,7 +29,7 @@ Windows port of natureboy's llama.cpp router setup (systemd unit + router preset
 ## Requirements
 
 - Windows 10 (target 21H2), PowerShell 5.1 (built in). No Python, no nssm, no extra tools.
-- NVIDIA GPU with a driver that supports CUDA 13.3.
+- An NVIDIA RTX 3090 TI with a driver that supports CUDA 13.3.
 - The GGUF models on the Windows disk at `C:\LLM_Models`. These are the same files Linux sees at `/mnt/windows/LLM_Models` (same physical disk, mounted by Linux for inference).
 - Internet access on first setup run (downloads the llama.cpp CUDA 13.3 nightly zip, about 150 MB).
 

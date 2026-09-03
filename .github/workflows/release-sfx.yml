@@ -126,7 +126,7 @@ jobs:
           DisplayLicense=
           FinishMessage=
           TargetName=$root\$exeName
-          FriendlyName=winslopper_RTX5090TI llama.cpp router
+          FriendlyName=winslopper llama.cpp router
           AppLaunched=cmd.exe /c run-setup.cmd
           PostInstallCmd=<None>
           AdminQuietInstCmd=
@@ -159,5 +159,5 @@ jobs:
         run: |
           $exeName = "winslopper-setup-${{ github.ref_name }}.exe"
           gh release create "${{ github.ref_name }}" "$exeName" SHA256SUMS.txt `
-            --title "winslopper_RTX5090TI ${{ github.ref_name }}" `
+            --title "winslopper ${{ github.ref_name }}" `
             --notes "One-click installer for the llama.cpp router on Windows. Runs setup unelevated and installs to %USERPROFILE%\winslopper_RTX5090TI. The EXE is unsigned, so Windows SmartScreen warns once; verify the SHA-256 in SHA256SUMS.txt before running. See the repository README and THIRD_PARTY_NOTICES.md."
