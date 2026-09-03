@@ -336,7 +336,7 @@ if (-not $needInstall) {
         if (-not (Test-Path $LlamaCudartZip)) { throw "Provided -LlamaCudartZip not found: $LlamaCudartZip" }
         $cudartZip = $LlamaCudartZip
         Write-Host "    using provided cudart zip: $cudartZip"
-    } elseif (-not $LlamaZip) {
+    } else {
         $cudartZip = Join-Path $dlDir $cudartName
         if ((Test-Path $cudartZip) -and -not $Force) {
             Write-Host "    using cached cudart zip: $cudartZip"
@@ -346,8 +346,6 @@ if (-not $needInstall) {
             Invoke-WebRequest -UseBasicParsing -Uri $cudartUrl -OutFile $cudartZip
             Write-Ok "downloaded $((Get-Item $cudartZip).Length) bytes"
         }
-    } else {
-        Write-Warn "no cudart runtime zip available; the server will run on CPU unless the CUDA runtime DLLs are already present"
     }
     if ($cudartZip) {
         $cudartDir = Join-Path $dlDir "cudart-$target"
