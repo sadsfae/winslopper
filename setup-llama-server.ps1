@@ -56,7 +56,9 @@
 
 .PARAMETER LlamaZip
     Path to a locally downloaded llama-*-bin-win-cuda-13.3-x64.zip. When set,
-    that zip is used instead of downloading.
+    that zip is used instead of downloading. Pair it with -LlamaCudartZip:
+    the CUDA runtime DLLs (cudart/cublas) ship in a separate llama.cpp asset,
+    and without them llama-server silently runs on CPU.
 
 .PARAMETER ModelsDir
     Directory containing the GGUF models (natureboy's /mnt/windows/LLM_Models).
@@ -85,6 +87,7 @@
 param(
     [string]$Build      = "b10786",
     [string]$LlamaZip   = "",
+    [string]$LlamaCudartZip = "",
     [string]$ModelsDir  = "C:\LLM_Models",
     [string]$InstallDir = "",
     [switch]$Force,
@@ -183,6 +186,40 @@ if (-not $needInstall) {
     $serverExe = Get-ChildItem -Path $staging -Recurse -Filter llama-server.exe | Select-Object -First 1
     if (-not $serverExe) { throw "llama-server.exe not found inside $zipPath" }
     $payload = $serverExe.DirectoryName
+
+    # The CUDA runtime DLLs (cudart/cublas/cublasLt) ship in a separate asset.
+    # Without them ggml-cuda.dll cannot load and the server silently runs on
+    # CPU. They must sit next to llama-server.exe (DLL loader search path).
+    $cudartName = "cudart-llama-bin-win-cuda-13.3-x64.zip"
+    $cudartZip = ""
+    if ($LlamaCudartZip) {
+        if (-not (Test-Path $LlamaCudartZip)) { throw "Provided -LlamaCudartZip not found: $LlamaCudartZip" }
+        $cudartZip = $LlamaCudartZip
+        Write-Host "    using provided cudart zip: $cudartZip"
+    } elseif (-not $LlamaZip) {
+        $cudartZip = Join-Path $dlDir $cudartName
+        if ((Test-Path $cudartZip) -and -not $Force) {
+            Write-Host "    using cached cudart zip: $cudartZip"
+        } else {
+            $cudartUrl = "https://github.com/ggml-org/llama.cpp/releases/download/$target/$cudartName"
+            Write-Host "    downloading $cudartUrl"
+            Invoke-WebRequest -UseBasicParsing -Uri $cudartUrl -OutFile $cudartZip
+            Write-Ok "downloaded $((Get-Item $cudartZip).Length) bytes"
+        }
+    } else {
+        Write-Warn "no cudart runtime zip available; the server will run on CPU unless the CUDA runtime DLLs are already present"
+    }
+    if ($cudartZip) {
+        $cudartDir = Join-Path $dlDir "cudart-$target"
+        if (Test-Path $cudartDir) { Remove-Item $cudartDir -Recurse -Force }
+        New-Item -ItemType Directory -Force -Path $cudartDir | Out-Null
+        Expand-Archive -Path $cudartZip -DestinationPath $cudartDir -Force
+        $runtimeDlls = Get-ChildItem -Path $cudartDir -Recurse | Where-Object { $_.Name -match "^(cudart64_|cublas64_|cublasLt64_).*\.dll$" }
+        if (-not $runtimeDlls) { Write-Warn "no cudart/cublas DLLs found in $cudartZip" }
+        $runtimeDlls | Copy-Item -Destination $payload -Force
+        Remove-Item $cudartDir -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Ok "CUDA runtime DLLs placed next to llama-server.exe"
+    }
 
     if (Test-Path $llamaDir) { Remove-Item $llamaDir -Recurse -Force }
     New-Item -ItemType Directory -Force -Path $llamaDir | Out-Null

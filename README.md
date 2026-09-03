@@ -31,7 +31,7 @@ Windows port of natureboy's llama.cpp router setup (systemd unit + router preset
 - Windows 10 (target 21H2), PowerShell 5.1 (built in). No Python, no nssm, no extra tools.
 - An NVIDIA RTX 3090 TI with a driver that supports CUDA 13.3.
 - The GGUF models on the Windows disk at `C:\LLM_Models`. These are the same files Linux sees at `/mnt/windows/LLM_Models` (same physical disk, mounted by Linux for inference).
-- Internet access on first setup run (downloads the llama.cpp CUDA 13.3 nightly zip, about 150 MB).
+- Internet access on first setup run (downloads the llama.cpp CUDA 13.3 binaries plus the CUDA runtime, about 330 MB together).
 
 ## Repository layout
 
@@ -67,7 +67,8 @@ llama-server.lnk            desktop shortcut (created by setup)
 
    Optional flags:
 
-   - `-LlamaZip C:\path\llama-bXXXXXn-bin-win-cuda-13.3-x64.zip` reuses a zip you already downloaded instead of downloading.
+   - `-LlamaZip C:\path\llama-bXXXXXn-bin-win-cuda-13.3-x64.zip` reuses a zip you already downloaded instead of downloading (pair with `-LlamaCudartZip`, the CUDA runtime DLLs live in a separate llama.cpp asset and are needed for GPU inference).
+   - `-LlamaCudartZip C:\path\cudart-llama-bin-win-cuda-13.3-x64.zip` supplies the CUDA runtime DLLs; when downloading, setup fetches it automatically.
    - `-ModelsDir D:\LLM_Models` if the models live elsewhere.
    - `-Build bXXXXX` to pick a specific nightly for the first install.
    - `-SkipFirewall` / `-NoShortcut` to skip the firewall rule / desktop shortcut.
