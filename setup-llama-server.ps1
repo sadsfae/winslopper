@@ -286,16 +286,6 @@ reasoning = off
 #chat-template-kwargs = {"preserve_thinking":false}
 mmproj = @@MODELS@@\mmproj-model-bf16.gguf
 
-[chat]
-model = @@MODELS@@\Qwen3.8-27B-OBLITERATED-Q4_K_M.gguf
-ctx-size = 83328
-ngl = 99
-flash-attn = on
-mmproj = @@MODELS@@\mmproj-model-bf16.gguf
-jinja = on
-chat-template-file = @@TEMPLATE@@
-reasoning = off
-
 [qwen-chat]
 model = @@MODELS@@\Qwen3.8-27B-OBLITERATED-Q4_K_M.gguf
 ctx-size = 166656
