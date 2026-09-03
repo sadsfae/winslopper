@@ -7,6 +7,7 @@ Windows port of natureboy's llama.cpp router setup (systemd unit + router preset
 - [Requirements](#requirements)
 - [Repository layout](#repository-layout)
 - [Setup](#setup)
+- [One-click release EXE](#one-click-release-exe)
 - [Running the server on demand](#running-the-server-on-demand)
 - [Menu](#menu)
 - [CLI subcommands](#cli-subcommands)
@@ -16,6 +17,7 @@ Windows port of natureboy's llama.cpp router setup (systemd unit + router preset
 - [systemd mapping](#systemd-mapping)
 - [Troubleshooting](#troubleshooting)
 - [Source files and making changes](#source-files-and-making-changes)
+- [License](#license)
 
 ## Requirements
 
@@ -64,6 +66,12 @@ llama-server.lnk            desktop shortcut (created by setup)
    - Run from an elevated PowerShell if you want the inbound firewall rule created.
 
    Re-running is safe (idempotent): the build is skipped when unchanged, and the config, template, launcher and menu are rewritten deterministically.
+
+## One-click release EXE
+
+Pushing a tag (`v*`) triggers the `release-sfx.yml` GitHub Actions workflow: it regenerates and verifies the setup script, downloads the pinned llama.cpp CUDA 13.3 zip, verifies its SHA-256 against the GitHub API, and assembles a self-extracting EXE that embeds the zip and the setup script. The EXE installs everything to `%USERPROFILE%\winslopper_RTX5090TI` (unelevated) and then runs exactly like the folder install. Downloads and the plain `.ps1` remain the manual alternative.
+
+SmartScreen: the EXE is unsigned, so Windows shows "Windows protected your PC" once (More info > Run anyway). This is expected for personal builds; a paid code-signing certificate is the only way to suppress it. Always compare the published SHA-256 before running, and prefer running the `.ps1` path if you distrust the artifact.
 
 ## Running the server on demand
 
@@ -137,3 +145,7 @@ choose [0-3]: 1
 - `src/router-config.ini` and `src/qwen-fixed.jinja` are the Linux originals from natureboy and the source of truth. Edit them, run `python3 gen.py`, then commit both the edited `src/` file and the regenerated `setup-llama-server.ps1`.
 - `gen.py` translates `/mnt/windows/LLM_Models/...` to the Windows models dir and `/home/wfoster/llm/models/qwen-fixed.jinja` to the local template path, embeds both byte-for-byte, and stamps the template SHA into the script. The Windows setup writes them out and verifies the written template against that SHA, so edits in `src/` flow through automatically.
 - `src/llama-server.service`: the original systemd unit, reference only (not consumed by `gen.py`).
+
+## License
+
+This repository is MIT licensed (see `LICENSE`), matching the license of the llama.cpp binaries it redistributes. Third-party components used by the release EXE (llama.cpp binaries, the 7-Zip SFX module that builds the self-extractor, and the Qwen chat template) are covered in `THIRD_PARTY_NOTICES.md`.

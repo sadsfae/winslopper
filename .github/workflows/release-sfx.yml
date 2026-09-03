@@ -1,0 +1,106 @@
+name: Release SFX installer
+
+# Builds a self-extracting Windows EXE and publishes it to the release.
+# Trigger: push any tag matching v*. Example: git tag v1.0.0 && git push --tags
+#
+# Security notes:
+#   - The EXE is unsigned, so Windows SmartScreen will warn once. That is
+#     expected; publish the SHA256 in the release body and verify before
+#     running. Code signing (paid cert) is the only way to suppress it.
+#   - The EXE runs unelevated (no UAC). It installs under %USERPROFILE%.
+#   - The embedded llama.cpp zip is fetched from the official llama.cpp
+#     GitHub release and its SHA-256 is verified against the GitHub API
+#     digest before it is baked into the EXE.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  sfx:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Regenerate and verify setup script
+        shell: pwsh
+        run: |
+          python gen.py
+          python tools/verify.py
+
+      - name: Resolve pinned llama.cpp build
+        shell: pwsh
+        run: |
+          $text = Get-Content setup-llama-server.ps1 -Raw
+          $m = [regex]::Match($text, '\[string\]\$Build\s*=\s*"([^"]+)"')
+          if (-not $m.Success) { throw "could not parse Build from setup-llama-server.ps1" }
+          "BUILD=$($m.Groups[1].Value)" | Out-File $env:GITHUB_ENV -Append
+
+      - name: Download llama.cpp CUDA 13.3 zip and verify digest
+        shell: pwsh
+        run: |
+          $asset = "llama-$env:BUILD-bin-win-cuda-13.3-x64.zip"
+          $url = "https://github.com/ggml-org/llama.cpp/releases/download/$env:BUILD/$asset"
+          Write-Host "downloading $url"
+          Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile llama.zip
+          $digest = gh api "repos/ggml-org/llama.cpp/releases/tags/$env:BUILD" --jq ".assets[] | select(.name==\"$asset\") | .digest"
+          $expected = ($digest -split ':')[1].ToLower()
+          $actual = (Get-FileHash llama.zip -Algorithm SHA256).Hash.ToLower()
+          if ($expected -ne $actual) { throw "SHA-256 mismatch: expected $expected got $actual" }
+          Write-Host "llama.zip verified (sha256 $actual)"
+
+      - name: Fetch 7-Zip SFX tooling
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/ip7z/7zip/releases/download/26.02/7zr.exe" -OutFile 7zr.exe
+          Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/ip7z/7zip/releases/download/26.02/7z2602-extra.7z" -OutFile extra.7z
+          .\7zr.exe x extra.7z -o7zip -y | Out-Null
+          $sfx = Get-ChildItem -Recurse 7zip -Filter 7zCon.sfx | Select-Object -First 1
+          if (-not $sfx) { throw "7zCon.sfx not found in 7-Zip extra package" }
+          Copy-Item $sfx.FullName .\7zCon.sfx
+          Write-Host "7zr.exe and 7zCon.sfx ready"
+
+      - name: Stage payload
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force staging | Out-Null
+          Copy-Item setup-llama-server.ps1 staging\
+          Copy-Item llama.zip staging\llama.zip
+          Copy-Item tools\run-setup.cmd staging\run-setup.cmd
+          Get-ChildItem staging | Select-Object Name, Length
+
+      - name: Build SFX installer
+        shell: pwsh
+        run: |
+          Push-Location staging
+          ..\7zr.exe a ..\payload.7z * -y | Out-Null
+          Pop-Location
+          $cfg = @(
+            ';!@Install@!UTF-8!',
+            'Title="winslopper_RTX5090TI llama.cpp router"',
+            'BeginPrompt="Install the llama.cpp router server to your user profile (no admin needed)?"',
+            'Execute="run-setup.cmd"',
+            ';!@InstallEnd@!'
+          )
+          $cfg | Out-File config.txt -Encoding ascii
+          $exeName = "winslopper-setup-${{ github.ref_name }}.exe"
+          cmd /c "copy /b 7zCon.sfx + config.txt + payload.7z $exeName > nul"
+          if (-not (Test-Path $exeName)) { throw "failed to assemble $exeName" }
+          $hash = (Get-FileHash $exeName -Algorithm SHA256).Hash
+          "$hash  $exeName" | Out-File SHA256SUMS.txt -Encoding ascii
+          Get-Item $exeName, SHA256SUMS.txt | Select-Object Name, Length
+
+      - name: Publish release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $exeName = "winslopper-setup-${{ github.ref_name }}.exe"
+          gh release create "${{ github.ref_name }}" "$exeName" SHA256SUMS.txt `
+            --title "winslopper_RTX5090TI ${{ github.ref_name }}" `
+            --notes "One-click installer for the llama.cpp router on Windows. Runs setup unelevated and installs to %USERPROFILE%\winslopper_RTX5090TI. The EXE is unsigned, so Windows SmartScreen warns once; verify the SHA-256 in SHA256SUMS.txt before running. See the repository README and THIRD_PARTY_NOTICES.md."

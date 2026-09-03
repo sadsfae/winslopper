@@ -62,6 +62,11 @@
     Directory containing the GGUF models (natureboy's /mnt/windows/LLM_Models).
     Default: C:\LLM_Models
 
+.PARAMETER InstallDir
+    Persistent install directory. Defaults to the script's own folder. The
+    self-extracting release EXE passes %USERPROFILE%\winslopper_RTX5090TI,
+    because SFX extraction runs in a temp directory that is deleted afterwards.
+
 .PARAMETER Force
     Re-download / re-extract the llama.cpp build even if already installed.
 
@@ -81,6 +86,7 @@ param(
     [string]$Build      = "b10786",
     [string]$LlamaZip   = "",
     [string]$ModelsDir  = "C:\LLM_Models",
+    [string]$InstallDir = "",
     [switch]$Force,
     [switch]$SkipFirewall,
     [switch]$NoShortcut
@@ -90,7 +96,7 @@ $ErrorActionPreference = "Stop"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $ProgressPreference = "SilentlyContinue"
 
-$root     = $PSScriptRoot
+$root     = $(if ($InstallDir) { $InstallDir } else { $PSScriptRoot })
 $llamaDir = Join-Path $root "llama"
 $llmDir   = Join-Path $root "llm\models"
 $dlDir    = Join-Path $root "downloads"
