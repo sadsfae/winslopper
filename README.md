@@ -31,7 +31,7 @@ Windows port of natureboy's llama.cpp router setup (systemd unit + router preset
 - Windows 10 (target 21H2), PowerShell 5.1 (built in). No Python, no nssm, no extra tools.
 - An NVIDIA RTX 3090 TI with a driver that supports CUDA 13.3.
 - The GGUF models on the Windows disk at `C:\LLM_Models`. These are the same files Linux sees at `/mnt/windows/LLM_Models` (same physical disk, mounted by Linux for inference).
-- Internet access on first setup run for the folder install (downloads the llama.cpp CUDA 13.3 binaries and the CUDA runtime, about 540 MB together). The release EXE embeds both.
+- No internet needed for the release EXE: the llama.cpp CUDA 13.3 binaries and the CUDA runtime are embedded in it (~540 MB). The folder-based setup downloads both on first run (about 540 MB together) unless you supply them with `-LlamaZip` / `-LlamaCudartZip`.
 
 ## Repository layout
 
@@ -68,7 +68,7 @@ llama-server.lnk            desktop shortcut (created by setup)
    Optional flags:
 
    - `-LlamaZip C:\path\llama-bXXXXXn-bin-win-cuda-13.3-x64.zip` reuses a zip you already downloaded instead of downloading.
-   - `-LlamaCudartZip C:\path\cudart-llama-bin-win-cuda-13.3-x64.zip` supplies the CUDA runtime DLLs (cudart/cublas/cublasLt) from the separate llama.cpp runtime asset. These are required for GPU inference; by default setup downloads them automatically.
+   - `-LlamaCudartZip C:\path\cudart-llama-bin-win-cuda-13.3-x64.zip` supplies the CUDA runtime DLLs (cudart/cublas/cublasLt) when installing from a folder; the release EXE bundles them. Setup downloads them automatically on the folder path if not provided. They are required for GPU inference (without them llama-server silently runs on CPU).
    - `-ModelsDir D:\LLM_Models` if the models live elsewhere.
    - `-Build bXXXXX` to pick a specific nightly for the first install.
    - `-SkipFirewall` / `-NoShortcut` to skip the firewall rule / desktop shortcut.
