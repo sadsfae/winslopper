@@ -105,11 +105,169 @@ while ($true) {
 """
 
 
-assert "'@" not in BAT_LAUNCHER and "'@" not in MENU_PS
+WEBUI_SETUP_PS = r"""# Optional Open WebUI installer: browser chat UI with tools and web search
+# for the llama.cpp router (http://127.0.0.1:8081/v1). Idempotent; run it only
+# if you want this. It installs Python only if missing (used only inside the
+# venv below), then installs open-webui from PyPI.
+param(
+    [switch]$SkipFirewall
+)
+$ErrorActionPreference = "Stop"
+$root  = $PSScriptRoot
+$webui = Join-Path $root "webui"
+$venv  = Join-Path $webui "venv"
+$bat   = Join-Path $root "llama-chat.bat"
+$port  = 8080
+
+function Write-Ok  ([string]$m) { Write-Host "    $m" -ForegroundColor Green }
+function Write-Warn([string]$m) { Write-Host "    WARN: $m" -ForegroundColor Yellow }
+
+# ---------------------------------------------------------------- python
+# Python 3.x is a prerequisite for Open WebUI. We do not install it: stop with
+# instructions if the py launcher or a real python.exe is missing.
+$pyPath = ""
+if (Get-Command py -ErrorAction SilentlyContinue) {
+    $pyPath = (py -3 -c "import sys; print(sys.executable)").Trim()
+}
+if (-not $pyPath -and (Get-Command python -ErrorAction SilentlyContinue)) {
+    $p = (python -c "import sys; print(sys.executable)").Trim()
+    if ($p -and ($p -notmatch "WindowsApps")) { $pyPath = $p }
+}
+if (-not $pyPath) {
+    Write-Warn "Python 3.x is required for Open WebUI and was not found."
+    Write-Warn "Install it yourself (winget install Python.Python.3.12, or from python.org),"
+    Write-Warn "then re-run this script. It is only used by the venv under webui\venv."
+    exit 1
+}
+$pyPath = (Resolve-Path $pyPath).Path
+Write-Ok "python: $pyPath"
+
+# ---------------------------------------------------------------- venv + open-webui
+New-Item -ItemType Directory -Force -Path $webui | Out-Null
+if (-not (Test-Path (Join-Path $venv "Scripts\python.exe"))) {
+    & $pyPath -m venv $venv
+    if ($LASTEXITCODE -ne 0) { throw "venv creation failed" }
+}
+$vp = Join-Path $venv "Scripts\python.exe"
+& $vp -m pip install --upgrade pip --quiet
+& $vp -m pip install open-webui
+if ($LASTEXITCODE -ne 0) { throw "pip install open-webui failed" }
+Write-Ok "open-webui installed (venv: $venv)"
+
+# llama-chat.ps1, llama-chat.bat and the llama-chat desktop shortcut are
+# already created by setup-llama-server.ps1; this script only installs the
+# Python service, so nothing else is written here.
+
+# ---------------------------------------------------------------- firewall (8080)
+if (-not $SkipFirewall) {
+    $ruleName = "llama-chat-$port"
+    $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    $existing = Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
+    if ($existing) {
+        Write-Ok "firewall rule '$ruleName' already present"
+    } elseif ($isAdmin) {
+        New-NetFirewallRule -DisplayName $ruleName -Direction Inbound -Protocol TCP -LocalPort $port -Action Allow -Profile Any | Out-Null
+        Write-Ok "added inbound firewall rule for TCP $port"
+    } else {
+        $helper = Join-Path $env:TEMP "winslopper-webui-firewall.ps1"
+        Set-Content -Path $helper -Value "New-NetFirewallRule -DisplayName '$ruleName' -Direction Inbound -Protocol TCP -LocalPort $port -Action Allow -Profile Any | Out-Null" -Encoding ASCII
+        Write-Host "asking for permission to open inbound TCP $port on the Windows firewall (UAC)..."
+        $elv = Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File',"`"$helper`"" -Wait -PassThru
+        Remove-Item -Path $helper -Force -ErrorAction SilentlyContinue
+        if ($elv.ExitCode -eq 0) {
+            Write-Ok "added inbound firewall rule for TCP $port"
+        } else {
+            Write-Warn "firewall rule not added (UAC declined); add manually in an elevated PowerShell:"
+            Write-Warn "New-NetFirewallRule -DisplayName llama-chat-$port -Direction Inbound -Protocol TCP -LocalPort $port -Action Allow -Profile Any"
+        }
+    }
+}
+
+Write-Host ""
+Write-Ok "Open WebUI ready. Start it any time with the llama-chat desktop icon (or llama-chat.bat)."
+Write-Ok "Open http://<host-ip>:$port from any device; first run creates a local account."
+Write-Ok "It talks to the router at http://127.0.0.1:8081/v1 (model qwen-chat)."
+Write-Ok "Web search tools are enabled in the UI: Settings > Web Search. Close llama-chat when unused to free its ~300 MB RAM."
+"""
+
+WEBUI_MENU_PS = r"""# llama-chat (Open WebUI) control menu - 1=start, 2=stop, 3=status, 0=exit
+$ErrorActionPreference = "SilentlyContinue"
+$root   = $PSScriptRoot
+$vp     = Join-Path $root "webui\venv\Scripts\python.exe"
+$port   = 8080
+
+function Test-ChatRunning { return [bool](Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue) }
+function Get-ChatProcId {
+    $c = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($c) { return $c.OwningProcess }
+    return $null
+}
+function Start-Chat {
+    if (-not (Test-Path $vp)) { Write-Host "Open WebUI is not installed yet - run setup-webui.ps1 first"; return }
+    if (Test-ChatRunning) { Write-Host "llama-chat is already running"; return }
+    $env:OPENAI_API_BASE_URL = "http://127.0.0.1:8081/v1"
+    $env:OPENAI_API_KEY = "noop"
+    Write-Host ""
+    Write-Host "Starting Open WebUI on 0.0.0.0:$port (logs below; close this window or Ctrl+C to stop)..."
+    & $vp -m open_webui.main --port $port --host 0.0.0.0
+    Write-Host "open-webui exited; cleaning up leftover process..."
+    $proc = Get-ChatProcId
+    if ($proc) { Stop-Process -Id $proc -Force -ErrorAction SilentlyContinue }
+}
+function Stop-Chat {
+    $proc = Get-ChatProcId
+    if ($proc) { Stop-Process -Id $proc -Force -ErrorAction SilentlyContinue }
+    Start-Sleep -Milliseconds 300
+    if (Test-ChatRunning) { Write-Host "failed to stop" } else { Write-Host "stopped" }
+}
+function Show-Status {
+    if (Test-ChatRunning) {
+        Write-Host "running (open http://127.0.0.1:$port here, or http://<host-ip>:$port from the LAN)"
+    } else {
+        Write-Host "stopped"
+    }
+}
+if ($args.Count -gt 0) {
+    switch ($args[0]) {
+        "start"   { Start-Chat }
+        "stop"    { Stop-Chat }
+        "status"  { Show-Status }
+        default   { Write-Host "usage: llama-chat.ps1 [start|stop|status]  (no args = menu)" }
+    }
+    exit 0
+}
+while ($true) {
+    Write-Host ""
+    Write-Host "llama-chat (Open WebUI) on 0.0.0.0:$port"
+    Write-Host "  1) Start chat server - logs stream in this window; closing it stops"
+    Write-Host "  2) Stop chat server"
+    Write-Host "  3) Status"
+    Write-Host "  0) Exit / close window"
+    $k = Read-Host "choose [0-3]"
+    switch ($k) {
+        "1" { Start-Chat }
+        "2" { Stop-Chat }
+        "3" { Show-Status }
+        "0" { exit 0 }
+        default { Write-Host "unknown choice" }
+    }
+}
+"""
+
+WEBUI_BAT = r"""@echo off
+setlocal
+title llama-chat (Open WebUI)
+cd /d "%~dp0"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0llama-chat.ps1" %*
+"""
+
+assert "'@" not in BAT_LAUNCHER and "'@" not in MENU_PS and "'@" not in WEBUI_SETUP_PS
+assert "'@" not in WEBUI_MENU_PS and "'@" not in WEBUI_BAT
 assert "'@" not in jinja and "'@" not in ported_ini, "here-string terminator collision"
 assert all(
-    ord(c) < 128 for c in (BAT_LAUNCHER + MENU_PS)
-), "menu/launcher must be pure ASCII"
+    ord(c) < 128
+    for c in (BAT_LAUNCHER + MENU_PS + WEBUI_SETUP_PS + WEBUI_MENU_PS + WEBUI_BAT)
+), "menu/launcher/webui must be pure ASCII"
 
 
 def ps_here_string(label, body):
@@ -122,6 +280,9 @@ def ps_here_string(label, body):
 
 launcher_var = ps_here_string("batText", BAT_LAUNCHER)
 menu_var = ps_here_string("menuText", MENU_PS)
+webui_var = ps_here_string("webuiText", WEBUI_SETUP_PS)
+webui_menu_var = ps_here_string("webuiMenuText", WEBUI_MENU_PS)
+webui_bat_var = ps_here_string("webuiBatText", WEBUI_BAT)
 tmpl_var = ps_here_string("tmplText", jinja)
 preset_var = ps_here_string("presetText", ported_ini)
 
@@ -145,6 +306,10 @@ PS = r"""#Requires -Version 5.1
                                      0=exit (also subcommands)
       .\REMOVE_ME_TO_UPGRADE         upgrade lock (created after first install)
       desktop shortcut               llama-server.lnk -> llama-server.bat
+      .\setup-webui.ps1              optional: installs Open WebUI (needs
+                                     Python 3.x, used only in webui\venv)
+      .\llama-chat.bat / .ps1        optional llama-chat menu (Open WebUI on
+                                     port 8080) + desktop icon llama-chat.lnk
 
     Menu behaviour:
       Option 1 runs llama-server in this same console window: its logs stream
@@ -237,6 +402,7 @@ $marker   = Join-Path $llamaDir ".llama-version"
 $lockFile = Join-Path $root "REMOVE_ME_TO_UPGRADE"
 $batFile  = Join-Path $root "llama-server.bat"
 $menuFile = Join-Path $root "llama-server.ps1"
+$webuiFile = Join-Path $root "setup-webui.ps1"
 $tmplSha  = "__TM_PLSHA__"
 $svcPort  = 8081
 $ModelsDir = $ModelsDir.TrimEnd("\")
@@ -396,6 +562,16 @@ __MENU_PS__
 [IO.File]::WriteAllText($menuFile, $menuText, (New-Object System.Text.UTF8Encoding($false)))
 Write-Ok "wrote $menuFile"
 
+__WEBUI_SETUP_PS__
+[IO.File]::WriteAllText($webuiFile, $webuiText, (New-Object System.Text.UTF8Encoding($false)))
+Write-Ok "wrote $webuiFile (optional Open WebUI installer; run it for the browser chat with tools)"
+__WEBUI_MENU_PS__
+[IO.File]::WriteAllText((Join-Path $root "llama-chat.ps1"), $webuiMenuText, (New-Object System.Text.UTF8Encoding($false)))
+Write-Ok "wrote llama-chat.ps1 (Open WebUI menu: 1=start, 2=stop, 3=status, 0=exit)"
+__WEBUI_BAT_PS__
+[IO.File]::WriteAllText((Join-Path $root "llama-chat.bat"), ($webuiBatText -replace "`r?`n", "`r`n"), (New-Object System.Text.ASCIIEncoding))
+Write-Ok "wrote llama-chat.bat (opens the llama-chat menu)"
+
 if (-not $NoShortcut) {
     $lnkPath = Join-Path ([Environment]::GetFolderPath("Desktop")) "llama-server.lnk"
     $ws = New-Object -ComObject WScript.Shell
@@ -406,6 +582,15 @@ if (-not $NoShortcut) {
     $lnk.Description = "llama.cpp router server on port $svcPort"
     $lnk.Save()
     Write-Ok "desktop shortcut: $lnkPath"
+
+    $chatLnk = Join-Path ([Environment]::GetFolderPath("Desktop")) "llama-chat.lnk"
+    $cl = $ws.CreateShortcut($chatLnk)
+    $cl.TargetPath = Join-Path $root "llama-chat.bat"
+    $cl.WorkingDirectory = $root
+    $cl.IconLocation = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe,0"
+    $cl.Description = "Open WebUI chat for the llama.cpp router (port 8080)"
+    $cl.Save()
+    Write-Ok "desktop shortcut: $chatLnk"
 }
 
 # ---------------------------------------------------------------- firewall
@@ -442,8 +627,9 @@ Write-Host "Setup complete." -ForegroundColor Green
 Write-Host "  Run     : .\llama-server.bat  (opens the control menu)"
 Write-Host "  Menu    : 1 = start server (logs stream in the window), 2 = stop, 3 = status, 0 = exit"
 Write-Host "  Close   : closing the window or Ctrl+C stops the server"
-Write-Host "  Direct  : .\llama-server.ps1 start|stop|restart|status|web"
+Write-Host "  Direct  : .\llama-server.ps1 start|stop|restart|status"
 Write-Host "  Health  : http://127.0.0.1:$svcPort/health"
+Write-Host "  WebUI   : optional browser chat with tools - install Python 3.x, run .\setup-webui.ps1, then use the llama-chat icon"
 Write-Host "  Config  : $preset"
 Write-Host "  Upgrade : delete $lockFile and re-run this script to update llama.cpp"
 Write-Host "  Auto-start at logon: put a shortcut to $batFile in shell:startup"
@@ -455,6 +641,9 @@ PS = (
     .replace("__TMPL_WRITE__", tmpl_write_rhs, 1)
     .replace("__BAT_LAUNCHER_PS__", launcher_var, 1)
     .replace("__MENU_PS__", menu_var, 1)
+    .replace("__WEBUI_SETUP_PS__", webui_var, 1)
+    .replace("__WEBUI_MENU_PS__", webui_menu_var, 1)
+    .replace("__WEBUI_BAT_PS__", webui_bat_var, 1)
     .replace("__TM_PLSHA__", tmpl_sha, 1)
 )
 

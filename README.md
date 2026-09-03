@@ -17,6 +17,7 @@ Windows port of natureboy's llama.cpp router setup (systemd unit + router preset
 - [Running the server on demand](#running-the-server-on-demand)
 - [Menu](#menu)
 - [CLI subcommands](#cli-subcommands)
+- [Open WebUI chat (optional)](#open-webui-chat-optional)
 - [Interface preview](#interface-preview)
 - [Upgrading llama.cpp](#upgrading-llama-cpp)
 - [Firewall](#firewall)
@@ -116,6 +117,17 @@ choose [0-3]: 1
 ```powershell
 .\llama-server.ps1 start | stop | restart | status
 ```
+
+## Open WebUI chat (optional)
+
+ChatGPT-like browser chat with tools (web search) for the LAN, backed by the router's Qwen3 preset. Open WebUI is the UI; llama.cpp stays the engine.
+
+- Prerequisite: Python 3.x on the Windows host (you install it once; Open WebUI only uses it inside the `webui\venv` it creates under the install dir).
+- One-time install: run `.\setup-webui.ps1` (created by setup). It creates the venv, installs open-webui, and asks once via UAC to open inbound TCP 8080.
+- Use: double-click the `llama-chat` desktop icon. Its own persistent terminal window shows a menu: 1 start the chat server (logs stream in the window), 2 stop, 3 status, 0 exit; closing the window also stops it. Nothing runs until you start it.
+- Open `http://<host-ip>:8080` from any device; first run creates a local account. The UI talks to the router at `http://127.0.0.1:8081/v1` with model `qwen-chat`; enable Web Search under Settings > Web Search for tool calls.
+- Stopped = ~0 CPU and memory; running it costs about 300 MB RAM plus the router's GPU load when chatting.
+- Without this, the simpler fallback is the router's own web page at `http://<host-ip>:8081/` (no Python, no tools).
 
 ## Interface preview
 
