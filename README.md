@@ -38,6 +38,7 @@ setup-llama-server.ps1      main installer, idempotent, run on Windows
 gen.py                      regenerates setup-llama-server.ps1 from src/ (build-time only)
 docs/                       interface mockup image + generator
 src/                        exact originals from natureboy
+tools/                      run-setup.cmd (release EXE entry point), verify.py (CI gate)
 ```
 
 What the setup script creates inside the folder you copy:
@@ -74,7 +75,7 @@ llama-server.lnk            desktop shortcut (created by setup)
 
 ## One-click release EXE
 
-Pushing a tag (`v*`) triggers the `release-sfx.yml` GitHub Actions workflow: it regenerates and verifies the setup script, downloads the pinned llama.cpp CUDA 13.3 zip, verifies its SHA-256 against the GitHub API, and assembles a self-extracting EXE that embeds the zip and the setup script. The EXE installs everything to `%USERPROFILE%\winslopper_RTX5090TI` (unelevated) and then runs exactly like the folder install. Downloads and the plain `.ps1` remain the manual alternative.
+Pushing a tag (`v*`) triggers the `release-sfx.yml` GitHub Actions workflow: it regenerates and verifies the setup script, downloads the pinned llama.cpp CUDA 13.3 zip, verifies its SHA-256 against the GitHub API, and packs the zip plus the setup script into a self-extracting EXE with IExpress (built into Windows, no third-party extractor). Running the EXE extracts to a temporary folder, opens a console window that streams the setup log, installs to `%USERPROFILE%\winslopper_RTX5090TI` (unelevated, no prompts except Windows Firewall when run elevated), then cleans up temporary files. The result behaves exactly like the folder install. Downloads and the plain `.ps1` remain the manual alternative.
 
 SmartScreen: the EXE is unsigned, so Windows shows "Windows protected your PC" once (More info > Run anyway). This is expected for personal builds; a paid code-signing certificate is the only way to suppress it. Always compare the published SHA-256 before running, and prefer running the `.ps1` path if you distrust the artifact.
 
