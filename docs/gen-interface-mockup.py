@@ -15,19 +15,21 @@ BASE = pathlib.Path(__file__).resolve().parent
 # palette (Windows Terminal dark)
 BG         = (12, 12, 12)
 TITLE_BG   = (31, 31, 31)
-TITLE_TEXT = (190, 190, 190)
+TITLE_TEXT = (200, 200, 200)
 BORDER     = (63, 63, 63)
-WHITE      = (230, 230, 230)
-GRAY       = (160, 160, 160)
+WHITE      = (235, 235, 235)
+GRAY       = (170, 170, 170)
 DIM        = (110, 122, 130)
-CYAN       = (86, 182, 194)
-GREEN      = (152, 195, 121)
-YELLOW     = (229, 192, 123)
+CYAN       = (96, 195, 208)
+GREEN      = (158, 200, 128)
+YELLOW     = (231, 195, 125)
 DESKTOP    = (37, 53, 74)
 
 TITLE  = "llama-server - llama.cpp router  (PowerShell)"
-FONT_SZ = 15
-ADV = FONT_SZ + 5  # line advance
+FONT_SZ = 24
+ADV = FONT_SZ + 6   # line advance
+PAD = 22
+TITLE_H = 44
 
 
 def find_font(spec):
@@ -52,7 +54,7 @@ def load_font(size, bold=False):
 
 FONT = load_font(FONT_SZ)
 FONT_BOLD = load_font(FONT_SZ, bold=True)
-FONT_TITLE = load_font(12, bold=True)
+FONT_TITLE = load_font(15, bold=True)
 
 # (text, color) segments; None = default WHITE
 LINES = [
@@ -63,24 +65,21 @@ LINES = [
     [("  0) ", CYAN), ("Exit / close window", GRAY)],
     [("choose [0-3]: ", CYAN), ("1", WHITE)],
     [],
-    [("Starting llama-server on 0.0.0.0:8081 (logs below; close this window or Ctrl+C to stop)...", GREEN)],
-    [("srv  | reading preset 'llm\\models\\router-config.ini' (6 models, max 1 concurrent)", DIM)],
+    [("Starting llama-server (logs below; close window or Ctrl+C to stop)...", GREEN)],
+    [("srv  | reading preset 'llm\\models\\router-config.ini' (6 models)", DIM)],
     [("srv  | model 'omp-agent' is not loaded, loading...", DIM)],
-    [("srv  | spawning server instance with name=omp-agent on port 48223", DIM)],
-    [("srv  |", DIM), ("   llama-server.exe --port 48223 --alias omp-agent --ctx-size 166656", GRAY),
-     (" --n-gpu-layers 99 --flash-attn on --jinja --chat-template-file", DIM),
-     (" llm\\models\\qwen-fixed.jinja --reasoning off", GRAY)],
-    [("model| loaded 'Qwen3.8-27B-OBLITERATED-Q4_K_M.gguf' + mmproj-model-bf16.gguf in 21.3s", GREEN)],
+    [("srv  | spawning instance name=omp-agent on port 48223", DIM)],
+    [("srv  |", DIM), ("   llama-server.exe --port 48223 --alias omp-agent", GRAY)],
+    [("     |", DIM), ("     --ctx-size 166656 --ngl 99 --flash-attn --jinja", GRAY)],
+    [("     |", DIM), ("     --chat-template-file llm\\models\\qwen-fixed.jinja --reasoning off", GRAY)],
+    [("model| loaded Qwen3.8-27B-OBLITERATED-Q4_K_M.gguf + mmproj (21.3s)", GREEN)],
     [("srv  | proxying request to model 'omp-agent' on port 48223", DIM)],
-    [("slot | id 3 | task 0 | prompt processing, n_tokens = 1842 | 1296.05 tokens per second", DIM)],
+    [("slot | id 3 | task 0 | prompt n_tokens=1842 | 1296 t/s", DIM)],
     [("tool | ", YELLOW), ("get_weather({\"city\": \"Paris\"})", YELLOW)],
     [],
     [("closing this window stops the server", DIM)],
     [],
 ]
-
-PAD = 18
-TITLE_H = 34
 
 
 def line_width(segs):
@@ -97,11 +96,9 @@ scale = 2
 img = Image.new("RGB", (W * scale + 3 * PAD, H * scale + 3 * PAD), DESKTOP)
 d = ImageDraw.Draw(img)
 
-# window with shadow
-shadow = (0, 0, 0)
 d.rectangle(
     [2 * PAD + 4, 2 * PAD + 4, 2 * PAD + W * scale + 4, 2 * PAD + H * scale + 4],
-    fill=shadow,
+    fill=(0, 0, 0),
 )
 
 ox, oy = PAD, PAD
@@ -109,11 +106,18 @@ d.rounded_rectangle([ox, oy, ox + W * scale, oy + H * scale], radius=10 * scale,
 
 # title bar
 d.rectangle([ox + 2 * scale, oy + 2 * scale, ox + W * scale - 2 * scale, oy + TITLE_H * scale], fill=TITLE_BG)
-dots = [(ox + 22, oy + 17), (ox + 38, oy + 17), (ox + 54, oy + 17)]
-for pos, col in zip(dots, [(255, 95, 86), (255, 189, 46), (40, 200, 64)]):
+for pos, col in zip(
+    [(ox + 24, oy + 22), (ox + 42, oy + 22), (ox + 60, oy + 22)],
+    [(255, 95, 86), (255, 189, 46), (40, 200, 64)],
+):
     r = 5 * scale
     d.ellipse([pos[0] - r, pos[1] - r, pos[0] + r, pos[1] + r], fill=col)
-d.text((ox + 78 * scale, oy + (TITLE_H / 2 - 6) * scale), TITLE, font=FONT_TITLE, fill=TITLE_TEXT)
+d.text(
+    (ox + 84 * scale, oy + (TITLE_H / 2 - 8) * scale),
+    TITLE,
+    font=FONT_TITLE,
+    fill=TITLE_TEXT,
+)
 
 # body
 ty = oy + TITLE_H * scale + PAD * scale
@@ -125,10 +129,13 @@ for segs in LINES:
             tx += FONT.getlength(text) * scale
     ty += ADV * scale
 
-# cursor block on the final line
+# cursor block on the final blank line
 cursor_x = ox + PAD * scale
 cursor_y = oy + (TITLE_H + PAD) * scale + (len(LINES) - 1) * ADV * scale + 1 * scale
-d.rectangle([cursor_x, cursor_y, cursor_x + max(7 * scale, int(FONT.getlength("M") * scale)), cursor_y + (FONT_SZ + 1) * scale], fill=WHITE)
+d.rectangle(
+    [cursor_x, cursor_y, cursor_x + max(9 * scale, int(FONT.getlength("M") * scale)), cursor_y + (FONT_SZ + 2) * scale],
+    fill=WHITE,
+)
 
 out = BASE / "interface-mockup.png"
 img = img.resize((img.width // scale, img.height // scale), Image.LANCZOS)
