@@ -583,12 +583,13 @@ while ($true) {
 Write-Ok "wrote $menuFile"
 
 $webuiText = @'
-# Optional Open WebUI installer: browser chat UI with tools and web search
-# for the llama.cpp router (http://127.0.0.1:8081/v1). Idempotent; run it only
-# if you want this. It installs Python only if missing (used only inside the
-# venv below), then installs open-webui from PyPI.
+# Optional Open WebUI setup/upgrade: browser chat UI with tools and web
+# search for the llama.cpp router (http://127.0.0.1:8081/v1). Python 3.11/3.12
+# is a prerequisite (not installed by this script); everything else stays
+# inside the webui\venv below. Re-running without -Upgrade is a no-op re-check.
 param(
-    [switch]$SkipFirewall
+    [switch]$SkipFirewall,
+    [switch]$Upgrade
 )
 $ErrorActionPreference = "Stop"
 $root  = $PSScriptRoot
@@ -649,9 +650,15 @@ if (-not (Test-Path $venvPy)) {
 }
 $vp = Join-Path $venv "Scripts\python.exe"
 & $vp -m pip install --upgrade pip --quiet
-& $vp -m pip install open-webui
-if ($LASTEXITCODE -ne 0) { throw "pip install open-webui failed" }
-Write-Ok "open-webui installed (venv: $venv)"
+if ($Upgrade) {
+    & $vp -m pip install --upgrade open-webui
+    if ($LASTEXITCODE -ne 0) { throw "pip upgrade open-webui failed" }
+    Write-Ok "open-webui updated to the latest version inside $venv"
+} else {
+    & $vp -m pip install open-webui
+    if ($LASTEXITCODE -ne 0) { throw "pip install open-webui failed" }
+    Write-Ok "open-webui installed (venv: $venv)"
+}
 
 # llama-chat.ps1, llama-chat.bat and the llama-chat desktop shortcut are
 # already created by setup-llama-server.ps1; this script only installs the
@@ -687,6 +694,7 @@ Write-Ok "Open WebUI ready. Start it any time with the llama-chat desktop icon (
 Write-Ok "Open http://<host-ip>:$port from any device; first run creates a local account."
 Write-Ok "It talks to the router at http://127.0.0.1:8081/v1 (model qwen-chat)."
 Write-Ok "Web search tools are enabled in the UI: Settings > Web Search. Close llama-chat when unused to free its ~300 MB RAM."
+Write-Ok "Updating later: run .\setup-webui.ps1 -Upgrade (stays inside the venv), then in the llama-chat menu press 2 then 1."
 '@
 [IO.File]::WriteAllText($webuiFile, $webuiText, (New-Object System.Text.UTF8Encoding($false)))
 Write-Ok "wrote $webuiFile (optional Open WebUI installer; run it for the browser chat with tools)"
