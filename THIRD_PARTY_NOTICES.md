@@ -15,21 +15,6 @@ and the CUDA 13.3 runtime DLLs) from the official llama.cpp nightly releases.
 No modifications are made to the binaries; they are extracted as distributed
 and verified by SHA-256 during the release build.
 
-## 7-Zip SFX tooling (LGPL-2.1-or-later, with the unRAR restriction)
-
-The self-extracting release EXE is built by concatenating the 7-Zip console
-SFX module (`7zS2con.sfx`) with the installation payload, so the EXE contains
-code from 7-Zip. The archive itself is created with `7zr.exe`.
-
-- Project: https://www.7-zip.org/
-- License: GNU LGPL version 2.1 or later, with the additional restriction
-  that the code must not be used to develop an RAR/WinRAR-compatible
-  compressor. See https://www.7-zip.org/license.txt
-- Version: 9.20 (2010-11-18), from the official extra package
-  (https://www.7-zip.org/a/7z920_extra.7z)
-- Both files are used unmodified; they are committed under `tools/7z/` so the
-  release build does not depend on fetching them at build time.
-
 ## Qwen chat template (Apache-2.0)
 
 `src/qwen-fixed.jinja` and the copy installed by setup are the chat template

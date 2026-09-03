@@ -163,4 +163,4 @@ Compared to Open WebUI it is intentionally simpler: single user, no accounts, hi
 
 ## License
 
-This repository is MIT licensed (see `LICENSE`), matching the license of the llama.cpp binaries it redistributes. Third-party components used by the release EXE (llama.cpp binaries, the 7-Zip SFX module that builds the self-extractor, and the Qwen chat template) are covered in `THIRD_PARTY_NOTICES.md`.
+This repository is MIT licensed (see `LICENSE`), matching the license of the llama.cpp binaries it redistributes. Third-party components used by the release EXE (the llama.cpp binaries and the Qwen chat template) are covered in `THIRD_PARTY_NOTICES.md`. The EXE itself is assembled with the IExpress self-extractor that ships with Windows.

@@ -9,5 +9,3 @@
 *.cmd text eol=lf
 *.bat text eol=lf
 *.png binary
-*.exe binary
-*.sfx binary

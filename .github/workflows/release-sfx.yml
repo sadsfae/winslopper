@@ -1,9 +1,10 @@
 name: Release SFX installer
 
-# Builds a self-extracting Windows EXE and publishes it to the release.
+# Builds a self-extracting Windows EXE (via the Windows built-in IExpress
+# self-extractor) and publishes it to the release.
 # Triggers:
 #   - push to main: validation run (regenerate, verify, download+verify the
-#     nightly zip, assemble the SFX) without publishing. Only fires when the
+#     nightly zip, assemble the EXE) without publishing. Only fires when the
 #     push touches code or config the build consumes (gen.py, the generated
 #     setup script, src/, tools/, .github/, .gitattributes); README/LICENSE/
 #     docs-only pushes are skipped.
@@ -75,14 +76,12 @@ jobs:
           if ($expected -ne $actual) { throw "SHA-256 mismatch: expected $expected got $actual" }
           Write-Host "llama.zip verified (sha256 $actual)"
 
-      - name: Verify bundled 7-Zip SFX tooling
+      - name: Check IExpress availability
         shell: pwsh
         run: |
-          $files = Get-Item tools\7z\7zr.exe, tools\7z\7zS2con.sfx
-          $files | ForEach-Object {
-            $h = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
-            Write-Host "$h  $($_.Name)"
-          }
+          $iexpress = Get-Command iexpress.exe -ErrorAction SilentlyContinue
+          if (-not $iexpress) { throw "iexpress.exe not found on runner" }
+          Write-Host "iexpress: $($iexpress.Source)"
 
       - name: Stage payload
         shell: pwsh
@@ -93,23 +92,42 @@ jobs:
           Copy-Item tools\run-setup.cmd staging\run-setup.cmd
           Get-ChildItem staging | Select-Object Name, Length
 
-      - name: Build SFX installer
+      - name: Build SFX installer (IExpress)
         shell: pwsh
         run: |
-          Push-Location staging
-          ..\tools\7z\7zr.exe a ..\payload.7z * -y | Out-Null
-          Pop-Location
-          $cfg = @(
-            ';!@Install@!UTF-8!',
-            'Title="winslopper_RTX5090TI llama.cpp router"',
-            'BeginPrompt="Install the llama.cpp router server to your user profile (no admin needed)?"',
-            'Execute="run-setup.cmd"',
-            ';!@InstallEnd@!'
-          )
-          $cfg | Out-File config.txt -Encoding ascii
           $exeName = "winslopper-setup-${{ github.ref_name }}.exe"
-          cmd /c "copy /b tools\7z\7zS2con.sfx + config.txt + payload.7z $exeName > nul"
-          if (-not (Test-Path $exeName)) { throw "failed to assemble $exeName" }
+          $sed = @"
+          [Version]
+          Class=IEXPRESS
+          SEDVersion=3
+          [Options]
+          PackagePurpose=CreatePackage
+          ShowContractLicenseWindow=NO
+          ByCopyrightCheck=NO
+          AppName=winslopper_RTX5090TI llama.cpp router
+          ShowInstallProgramWindow=1
+          HideExtractAnimation=1
+          UsePackageNameForTargetName=NO
+          TargetName=$exeName
+          LicenseFile=<None>
+          InstructionFile=<None>
+          PostInstallCmd=<None>
+          FinishMessage=NO
+          ShowInstallProgramStatus=NO
+          SourceFiles=SourceFiles
+          [Strings]
+          InstallProgram=cmd.exe /c run-setup.cmd
+          [SourceFiles]
+          SourceFiles0=staging\*.*
+          [SourceFiles0]
+          %FILE0%=staging\run-setup.cmd
+          %FILE1%=staging\setup-llama-server.ps1
+          %FILE2%=staging\llama.zip
+          "@
+          $sed | Out-File -FilePath config.sed -Encoding ascii
+          iexpress.exe /N config.sed /Q
+          Write-Host "iexpress exit code: $LASTEXITCODE"
+          if (-not (Test-Path $exeName)) { throw "iexpress did not produce $exeName" }
           $hash = (Get-FileHash $exeName -Algorithm SHA256).Hash
           "$hash  $exeName" | Out-File SHA256SUMS.txt -Encoding ascii
           Get-Item $exeName, SHA256SUMS.txt | Select-Object Name, Length
