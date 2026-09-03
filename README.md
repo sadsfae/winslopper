@@ -4,7 +4,7 @@
 [![Release](https://img.shields.io/github/v/release/sadsfae/winslopper)](https://github.com/sadsfae/winslopper/releases/latest)
 [![Windows](https://img.shields.io/badge/Windows-10%2B-0078D6?logo=windows&logoColor=white)](https://learn.microsoft.com/en-us/powershell/)
 
-> Targets an NVIDIA RTX 3090 TI only. The repository was originally named "winslopper_RTX5090TI"; the "5090" was a typo.
+> Targets an NVIDIA RTX 3090 TI only llama.cpp setup on Linux.
 
 Windows port of natureboy's llama.cpp router setup (systemd unit + router preset + Qwen chat template). Runs the llama.cpp router on port 8081 with the same `router-config.ini` and `qwen-fixed.jinja`, controlled from a small PowerShell menu in a normal console window. No service, no auto-start: you run it on demand, and closing the window stops the server.
 
@@ -143,12 +143,12 @@ Compared to Open WebUI it is intentionally simpler: single user, no accounts, hi
 
 ## systemd mapping
 
-| systemd (Linux unit) | Windows equivalent |
-| --- | --- |
-| `Type=simple` + `ExecStart` | menu option 1 (foreground console) |
-| `Restart=always` / `RestartSec=10` | none; closing the window stops it |
-| `LimitMEMLOCK=infinity` | none (router mode does not use `--mlock`) |
-| `WantedBy=default.target` | none; run on demand via the shortcut |
+| systemd (Linux unit)               | Windows equivalent                        |
+| ---------------------------------- | ----------------------------------------- |
+| `Type=simple` + `ExecStart`        | menu option 1 (foreground console)        |
+| `Restart=always` / `RestartSec=10` | none; closing the window stops it         |
+| `LimitMEMLOCK=infinity`            | none (router mode does not use `--mlock`) |
+| `WantedBy=default.target`          | none; run on demand via the shortcut      |
 
 ## Troubleshooting
 
