@@ -54,7 +54,8 @@ jobs:
           $url = "https://github.com/ggml-org/llama.cpp/releases/download/$env:BUILD/$asset"
           Write-Host "downloading $url"
           Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile llama.zip
-          $digest = gh api "repos/ggml-org/llama.cpp/releases/tags/$env:BUILD" --jq ".assets[] | select(.name==\"$asset\") | .digest"
+          $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/ggml-org/llama.cpp/releases/tags/$env:BUILD" -Headers @{ "User-Agent" = "winslopper-setup" } -TimeoutSec 30
+          $digest = ($rel.assets | Where-Object { $_.name -eq $asset } | Select-Object -First 1).digest
           $expected = ($digest -split ':')[1].ToLower()
           $actual = (Get-FileHash llama.zip -Algorithm SHA256).Hash.ToLower()
           if ($expected -ne $actual) { throw "SHA-256 mismatch: expected $expected got $actual" }
