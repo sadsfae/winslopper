@@ -9,8 +9,8 @@ import pathlib
 BASE = pathlib.Path(__file__).resolve().parent
 SRC = BASE / "src"
 
-ini_text = (SRC / "router-config.ini").read_text(encoding="utf-8")
-jinja = (SRC / "qwen-fixed.jinja").read_text(encoding="utf-8", newline="")
+ini_text = (SRC / "router-config.ini").read_bytes().decode("utf-8")
+jinja = (SRC / "qwen-fixed.jinja").read_bytes().decode("utf-8")
 
 ORIGINAL_TMPL_SHA = "55d4931433fe502b794226ee7f4d206a6bdd436ac9f80eb7d8ebb4c639f9ea0c"
 tmpl_sha = hashlib.sha256(jinja.encode("utf-8")).hexdigest()
