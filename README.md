@@ -15,7 +15,7 @@ Windows port of natureboy's llama.cpp router setup (systemd unit + router preset
 - [Firewall](#firewall)
 - [systemd mapping](#systemd-mapping)
 - [Troubleshooting](#troubleshooting)
-- [Source files](#source-files)
+- [Source files and making changes](#source-files-and-making-changes)
 
 ## Requirements
 
@@ -132,7 +132,8 @@ choose [0-3]: 1
 - "llama-server is already running": a leftover process; use menu option 2, close the window, or `taskkill /IM llama-server.exe /F`.
 - Health check: `http://127.0.0.1:8081/health`; web UI: `http://127.0.0.1:8081`.
 
-## Source files
+## Source files and making changes
 
-- `src/router-config.ini` and `src/qwen-fixed.jinja`: the exact current files from natureboy, with Linux paths translated to Windows inside `setup-llama-server.ps1`. The template SHA is `55d4931433fe502b794226ee7f4d206a6bdd436ac9f80eb7d8ebb4c639f9ea0c`, verified at runtime.
-- `src/llama-server.service`: the original systemd unit, for reference.
+- `src/router-config.ini` and `src/qwen-fixed.jinja` are the Linux originals from natureboy and the source of truth. Edit them, run `python3 gen.py`, then commit both the edited `src/` file and the regenerated `setup-llama-server.ps1`.
+- `gen.py` translates `/mnt/windows/LLM_Models/...` to the Windows models dir and `/home/wfoster/llm/models/qwen-fixed.jinja` to the local template path, embeds both byte-for-byte, and stamps the template SHA into the script. The Windows setup writes them out and verifies the written template against that SHA, so edits in `src/` flow through automatically.
+- `src/llama-server.service`: the original systemd unit, reference only (not consumed by `gen.py`).

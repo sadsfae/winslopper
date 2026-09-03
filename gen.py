@@ -11,9 +11,12 @@ SRC = BASE / "src"
 
 ini_text = (SRC / "router-config.ini").read_text(encoding="utf-8")
 jinja = (SRC / "qwen-fixed.jinja").read_text(encoding="utf-8", newline="")
-sha = hashlib.sha256(jinja.encode("utf-8")).hexdigest()
-expected_sha = "55d4931433fe502b794226ee7f4d206a6bdd436ac9f80eb7d8ebb4c639f9ea0c"
-assert sha == expected_sha, f"template sha mismatch: {sha}"
+
+ORIGINAL_TMPL_SHA = "55d4931433fe502b794226ee7f4d206a6bdd436ac9f80eb7d8ebb4c639f9ea0c"
+tmpl_sha = hashlib.sha256(jinja.encode("utf-8")).hexdigest()
+if tmpl_sha != ORIGINAL_TMPL_SHA:
+    print(f"note: src/qwen-fixed.jinja differs from the original natureboy file (sha {tmpl_sha})")
+
 # source template has NO trailing newline; the writer trims the here-string's
 # terminator newline to stay byte-exact
 tmpl_has_trailing_nl = jinja.endswith("\n")
@@ -216,7 +219,7 @@ $marker   = Join-Path $llamaDir ".llama-version"
 $lockFile = Join-Path $root "REMOVE_ME_TO_UPGRADE"
 $batFile  = Join-Path $root "llama-server.bat"
 $menuFile = Join-Path $root "llama-server.ps1"
-$tmplSha  = "55d4931433fe502b794226ee7f4d206a6bdd436ac9f80eb7d8ebb4c639f9ea0c"
+$tmplSha  = "__TM_PLSHA__"
 $svcPort  = 8081
 $ModelsDir = $ModelsDir.TrimEnd("\")
 
@@ -388,6 +391,7 @@ PS = (
     .replace("__TMPL_WRITE__", tmpl_write_rhs, 1)
     .replace("__BAT_LAUNCHER_PS__", launcher_var, 1)
     .replace("__MENU_PS__", menu_var, 1)
+    .replace("__TM_PLSHA__", tmpl_sha, 1)
 )
 
 out = BASE / "setup-llama-server.ps1"
