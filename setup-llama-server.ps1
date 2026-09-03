@@ -472,9 +472,12 @@ echo llama-server.exe not found - run setup-llama-server.ps1 first.
 exit /b 1
 
 :run
-echo Starting llama-server on 0.0.0.0:$svcPort ^(Ctrl+C to stop^)...
+echo Starting llama-server on 0.0.0.0:$svcPort ^(Ctrl+C or close this window to stop^)...
 "%LLAMA_EXE%" --port $svcPort --host 0.0.0.0 --models-preset "%PRESET%" --models-max 1 --cache-type-k q8_0 --cache-type-v q8_0
-exit /b %errorlevel%
+set "RC=%errorlevel%"
+REM close-out: stop model child servers the router spawned, if any survive
+taskkill /IM llama-server.exe /F >nul 2>&1
+exit /b %RC%
 
 :stop
 taskkill /IM llama-server.exe /T /F >nul 2>&1
