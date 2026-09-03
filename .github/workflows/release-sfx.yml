@@ -3,9 +3,13 @@ name: Release SFX installer
 # Builds a self-extracting Windows EXE and publishes it to the release.
 # Triggers:
 #   - push to main: validation run (regenerate, verify, download+verify the
-#     nightly zip, assemble the SFX) without publishing.
-#   - push any tag matching v*: same build, then publishes the EXE + SHA256
-#     to the release. Example: git tag v1.0.0 && git push --tags
+#     nightly zip, assemble the SFX) without publishing. Only fires when the
+#     push touches code or config the build consumes (gen.py, the generated
+#     setup script, src/, tools/, .github/, .gitattributes); README/LICENSE/
+#     docs-only pushes are skipped.
+#   - push any tag matching v*: always builds and publishes the EXE + SHA256
+#     to the release, regardless of which paths the tag changed. Example:
+#     git tag v1.0.0 && git push --tags
 #
 # Security notes:
 #   - The EXE is unsigned, so Windows SmartScreen will warn once. That is
@@ -18,10 +22,21 @@ name: Release SFX installer
 
 on:
   push:
-    branches:
-      - main
-    tags:
-      - 'v*'
+    # Validation runs on main, only for code/config changes. A push that
+    # touches only README/LICENSE/THIRD_PARTY_NOTICES/docs is skipped.
+    - branches:
+        - main
+      paths:
+        - 'gen.py'
+        - 'setup-llama-server.ps1'
+        - 'src/**'
+        - 'tools/**'
+        - '.github/**'
+        - '.gitattributes'
+    # Release builds on any tag push, path filter intentionally not applied:
+    # tags are explicit release actions.
+    - tags:
+        - 'v*'
 
 permissions:
   contents: write
