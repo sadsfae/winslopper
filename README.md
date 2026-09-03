@@ -31,7 +31,7 @@ Windows port of natureboy's llama.cpp router setup (systemd unit + router preset
 - Windows 10 (target 21H2), PowerShell 5.1 (built in). No Python, no nssm, no extra tools.
 - An NVIDIA RTX 3090 TI with a driver that supports CUDA 13.3.
 - The GGUF models on the Windows disk at `C:\LLM_Models`. These are the same files Linux sees at `/mnt/windows/LLM_Models` (same physical disk, mounted by Linux for inference).
-- Internet access on first setup run (downloads the llama.cpp CUDA 13.3 binaries, about 150 MB, plus the CUDA runtime DLLs, about 390 MB).
+- Internet access on first setup run for the folder install (downloads the llama.cpp CUDA 13.3 binaries and the CUDA runtime, about 540 MB together). The release EXE embeds both.
 
 ## Repository layout
 
@@ -78,7 +78,7 @@ llama-server.lnk            desktop shortcut (created by setup)
 
 ## One-click release EXE
 
-Pushing a tag (`v*`) triggers the `release-sfx.yml` GitHub Actions workflow: it regenerates and verifies the setup script, downloads the pinned llama.cpp CUDA 13.3 zip, verifies its SHA-256 against the GitHub API, and packs the zip plus the setup script into a self-extracting EXE with IExpress (built into Windows, no third-party extractor). Running the EXE extracts to a temporary folder, opens a console window that streams the setup log, installs to `%USERPROFILE%\winslopper` (unelevated), then cleans up temporary files. When the inbound firewall rule is missing, setup asks once via UAC whether to open TCP 8081 for LAN access (`-SkipFirewall` or declining skips it). The result behaves exactly like the folder install. Downloads and the plain `.ps1` remain the manual alternative.
+Pushing a tag (`v*`) triggers the `release-sfx.yml` GitHub Actions workflow: it regenerates and verifies the setup script, downloads the pinned llama.cpp CUDA 13.3 zip, verifies its SHA-256 against the GitHub API, and packs the binaries zip, the CUDA runtime DLLs zip, and the setup script into a self-extracting EXE (~540 MB) with IExpress (built into Windows, no third-party extractor). Running the EXE extracts to a temporary folder, opens a console window that streams the setup log, installs to `%USERPROFILE%\winslopper` (unelevated), then cleans up temporary files. When the inbound firewall rule is missing, setup asks once via UAC whether to open TCP 8081 for LAN access (`-SkipFirewall` or declining skips it). The result behaves exactly like the folder install. Downloads and the plain `.ps1` remain the manual alternative.
 
 SmartScreen: the EXE is unsigned, so Windows shows "Windows protected your PC" once (More info > Run anyway). This is expected for personal builds; a paid code-signing certificate is the only way to suppress it. Always compare the published SHA-256 before running, and prefer running the `.ps1` path if you distrust the artifact.
 

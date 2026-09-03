@@ -73,6 +73,13 @@ jobs:
           $actual = (Get-FileHash llama.zip -Algorithm SHA256).Hash.ToLower()
           if ($expected -ne $actual) { throw "SHA-256 mismatch for $asset" }
           Write-Host "llama.zip verified (sha256 $actual)"
+          $cudart = "cudart-llama-bin-win-cuda-13.3-x64.zip"
+          Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/ggml-org/llama.cpp/releases/download/$env:BUILD/$cudart" -OutFile cudart.zip
+          $digest = ($rel.assets | Where-Object { $_.name -eq $cudart } | Select-Object -First 1).digest
+          $expected = ($digest -split ':')[1].ToLower()
+          $actual = (Get-FileHash cudart.zip -Algorithm SHA256).Hash.ToLower()
+          if ($expected -ne $actual) { throw "SHA-256 mismatch for $cudart" }
+          Write-Host "cudart.zip verified (sha256 $actual)"
 
 
       - name: Check IExpress availability
@@ -88,6 +95,7 @@ jobs:
           New-Item -ItemType Directory -Force staging | Out-Null
           Copy-Item setup-llama-server.ps1 staging\
           Copy-Item llama.zip staging\llama.zip
+          Copy-Item cudart.zip staging\cudart.zip
 
           Copy-Item tools\run-setup.cmd staging\run-setup.cmd
           Get-ChildItem staging | Select-Object Name, Length
@@ -134,12 +142,14 @@ jobs:
           FILE0="run-setup.cmd"
           FILE1="setup-llama-server.ps1"
           FILE2="llama.zip"
+          FILE3="cudart.zip"
           [SourceFiles]
           SourceFiles0=$root\staging
           [SourceFiles0]
           %FILE0%=
           %FILE1%=
           %FILE2%=
+          %FILE3%=
           "@
           $sed | Out-File -FilePath config.sed -Encoding ascii
           # iexpress.exe is a GUI-subsystem app: PowerShell does not wait for it
