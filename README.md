@@ -2,6 +2,7 @@
 
 [![Build](https://github.com/sadsfae/winslopper_RTX5090TI/actions/workflows/release-sfx.yml/badge.svg)](https://github.com/sadsfae/winslopper_RTX5090TI/actions/workflows/release-sfx.yml)
 [![Release](https://img.shields.io/github/v/release/sadsfae/winslopper_RTX5090TI)](https://github.com/sadsfae/winslopper_RTX5090TI/releases/latest)
+[![Windows](https://img.shields.io/badge/Windows-10%2B-0078D6?logo=windows&logoColor=white)](https://learn.microsoft.com/en-us/powershell/)
 
 Windows port of natureboy's llama.cpp router setup (systemd unit + router preset + Qwen chat template). Runs the llama.cpp router on port 8081 with the same `router-config.ini` and `qwen-fixed.jinja`, controlled from a small PowerShell menu in a normal console window. No service, no auto-start: you run it on demand, and closing the window stops the server.
 
