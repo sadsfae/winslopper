@@ -1,0 +1,20 @@
+[Unit]
+Description=Inference Slopper
+After=network.target
+
+[Service]
+Type=simple
+LimitMEMLOCK=infinity
+WorkingDirectory=%h/llama.cpp
+
+##### WORKS with open webui 
+#ExecStart=%h/llama.cpp/build/bin/llama-server -m %h/llm/models/Qwen3.6-27B-Q4_K_M.gguf --ctx-size 32768 --n-gpu-layers 99 --flash-attn on --parallel 1 --no-warmup --mlock --port 8081 --host 0.0.0.0
+
+#### router mode with config (FIXED)
+ExecStart=%h/llama.cpp/build/bin/llama-server --port 8081 --host 0.0.0.0 --models-preset %h/llm/models/router-config.ini --models-max 1 --cache-type-k q8_0 --cache-type-v q8_0
+
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
