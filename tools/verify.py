@@ -26,7 +26,7 @@ for i, line in enumerate(ps.splitlines(), 1):
 
 
 def extract(label):
-    m = re.search(r"^\$%s = @'\n(.*?)\n'@$" % label, ps, re.M | re.S)
+    m = re.search(rf"^\${label} = @'\n(.*?)\n'@$", ps, re.MULTILINE | re.DOTALL)
     assert m, label
     return m.group(1) + "\n"
 
@@ -35,12 +35,17 @@ tmpl = extract("tmplText")
 src_tmpl = (REPO / "src" / "qwen-fixed.jinja").read_bytes()
 assert tmpl.encode()[:-1] == src_tmpl, "template not byte-exact"
 expected = hashlib.sha256(src_tmpl).hexdigest()
-assert f'$tmplSha  = "{expected}"' in ps, "injected $tmplSha does not match src template"
+assert (
+    f'$tmplSha  = "{expected}"' in ps
+), "injected $tmplSha does not match src template"
 print("template byte-exact, injected SHA:", expected)
 
-ported = (REPO / "src" / "router-config.ini").read_text().replace(
-    "/mnt/windows/LLM_Models/", "@@MODELS@@\\"
-).replace("/home/wfoster/llm/models/qwen-fixed.jinja", "@@TEMPLATE@@")
+ported = (
+    (REPO / "src" / "router-config.ini")
+    .read_text()
+    .replace("/mnt/windows/LLM_Models/", "@@MODELS@@\\")
+    .replace("/home/wfoster/llm/models/qwen-fixed.jinja", "@@TEMPLATE@@")
+)
 assert extract("presetText") == ported, "preset not exact"
 print("preset exact")
 

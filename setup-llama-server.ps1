@@ -15,7 +15,7 @@
       .\llm\models\qwen-fixed.jinja  chat template, byte-identical to natureboy
       .\llama-server.bat             launcher -> opens the control menu
       .\llama-server.ps1             control menu: 1=start, 2=stop, 3=status,
-                                     0=exit (also accepts start/stop/status args)
+                                     4=web chat, 0=exit (also subcommands)
       .\REMOVE_ME_TO_UPGRADE         upgrade lock (created after first install)
       desktop shortcut               llama-server.lnk -> llama-server.bat
 
@@ -482,12 +482,16 @@ $exe    = Join-Path $root "llama\llama-server.exe"
 $preset = Join-Path $root "llm\models\router-config.ini"
 $port   = 8081
 $health = "http://127.0.0.1:$port/health"
+$webui  = "http://127.0.0.1:$port"
 
 function Test-ServerRunning { return [bool](Get-Process -Name llama-server -ErrorAction SilentlyContinue) }
-function Get-ServerStatus {
-    $h = "down"
-    try { $h = (Invoke-WebRequest -UseBasicParsing -Uri $health -TimeoutSec 3).Content } catch {}
-    return $h
+function Get-ServerHealth {
+    try {
+        $r = Invoke-WebRequest -UseBasicParsing -Uri $health -TimeoutSec 3
+        return ($r.StatusCode -eq 200 -and $r.Content -match '"status"\s*:\s*"ok"')
+    } catch {
+        return $false
+    }
 }
 function Start-Server {
     if (Test-ServerRunning) { Write-Host "llama-server is already running"; return }
@@ -505,8 +509,16 @@ function Stop-Server {
     if (Test-ServerRunning) { Write-Host "failed to stop" } else { Write-Host "stopped" }
 }
 function Show-Status {
-    $h = Get-ServerStatus
-    if (Test-ServerRunning) { Write-Host "running ($h)" } else { Write-Host "stopped" }
+    if (-not (Test-ServerRunning)) { Write-Host "stopped"; return }
+    if (Get-ServerHealth) { Write-Host "running and healthy ($webui)" } else { Write-Host "running (starting? health not ok yet)" }
+}
+function Show-WebChat {
+    if (-not (Test-ServerRunning)) { Write-Host "llama-server is not running - start it first (option 1)"; return }
+    if (-not (Get-ServerHealth)) { Write-Host "server is up but not healthy yet (still loading); wait a moment and retry"; return }
+    Write-Host ""
+    Write-Host "Opening web chat: $webui" -ForegroundColor Green
+    Write-Host "  pick model 'qwen-chat' in the dropdown; the UI is served by llama-server itself"
+    Start-Process $webui
 }
 
 if ($args.Count -gt 0) {
@@ -515,7 +527,8 @@ if ($args.Count -gt 0) {
         "stop"    { Stop-Server }
         "restart" { Stop-Server; Start-Server }
         "status"  { Show-Status }
-        default   { Write-Host "usage: llama-server.ps1 [start|stop|restart|status]  (no args = menu)" }
+        "web"     { Show-WebChat }
+        default   { Write-Host "usage: llama-server.ps1 [start|stop|restart|status|web]  (no args = menu)" }
     }
     exit 0
 }
@@ -526,12 +539,14 @@ while ($true) {
     Write-Host "  1) Start server - logs stream in this window; closing it stops"
     Write-Host "  2) Stop server"
     Write-Host "  3) Status"
+    Write-Host "  4) Open web chat: $webui (needs the server running)"
     Write-Host "  0) Exit / close window"
-    $k = Read-Host "choose [0-3]"
+    $k = Read-Host "choose [0-4]"
     switch ($k) {
         "1" { Start-Server }
         "2" { Stop-Server }
         "3" { Show-Status }
+        "4" { Show-WebChat }
         "0" { exit 0 }
         default { Write-Host "unknown choice" }
     }
@@ -570,9 +585,9 @@ if (-not $SkipFirewall) {
 Write-Host ""
 Write-Host "Setup complete." -ForegroundColor Green
 Write-Host "  Run     : .\llama-server.bat  (opens the control menu)"
-Write-Host "  Menu    : 1 = start server (logs stream in the window), 2 = stop, 3 = status, 0 = exit"
+Write-Host "  Menu    : 1 = start server (logs stream in the window), 2 = stop, 3 = status, 4 = web chat, 0 = exit"
 Write-Host "  Close   : closing the window or Ctrl+C stops the server"
-Write-Host "  Direct  : .\llama-server.ps1 start|stop|restart|status"
+Write-Host "  Direct  : .\llama-server.ps1 start|stop|restart|status|web"
 Write-Host "  Health  : http://127.0.0.1:$svcPort/health"
 Write-Host "  Config  : $preset"
 Write-Host "  Upgrade : delete $lockFile and re-run this script to update llama.cpp"

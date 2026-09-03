@@ -10,6 +10,7 @@ Windows port of natureboy's llama.cpp router setup (systemd unit + router preset
 - [One-click release EXE](#one-click-release-exe)
 - [Running the server on demand](#running-the-server-on-demand)
 - [Menu](#menu)
+- [Web chat (built-in)](#web-chat-built-in)
 - [CLI subcommands](#cli-subcommands)
 - [Interface preview](#interface-preview)
 - [Upgrading llama.cpp](#upgrading-llama-cpp)
@@ -92,19 +93,29 @@ llama.cpp router on 0.0.0.0:8081
   1) Start server - logs stream in this window; closing it stops
   2) Stop server
   3) Status
+  4) Open web chat (http://127.0.0.1:8081)
   0) Exit / close window
-choose [0-3]: 1
+choose [0-4]: 1
 ```
 
 - `1` starts the router in this window. The first request to a model loads it (10 to 40 seconds).
 - `2` stops it immediately (the router and any child model servers).
 - `3` shows `running ({"status":"ok"})` or `stopped`.
+- `4` opens the built-in web chat in your browser (see below).
 - `0` closes the window.
+
+## Web chat (built-in)
+
+llama.cpp's web UI is served by llama-server itself at `http://127.0.0.1:8081/` (menu option 4, or `.\llama-server.ps1 web`). It is not a separate process, so it cannot be started or stopped on its own: when the server is running the chat is up, and stopping the server closes it. Option 4 only opens the browser when the server is running and its `/health` endpoint reports `ok`, and it prints the URL before launching.
+
+It is a ChatGPT-style chat: streaming replies, markdown, a model dropdown listing the router's presets, and image input for the vision models (`qwen-chat` is Qwen3.8-27B-OBLITERATED + mmproj). Pick `qwen-chat` in the dropdown; the UI remembers your last model.
+
+Compared to Open WebUI it is intentionally simpler: single user, no accounts, history stays in the browser, no plugin ecosystem. It needs no Docker or Podman on the Windows machine.
 
 ## CLI subcommands
 
 ```powershell
-.\llama-server.ps1 start | stop | restart | status
+.\llama-server.ps1 start | stop | restart | status | web
 ```
 
 ## Interface preview

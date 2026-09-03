@@ -1,7 +1,11 @@
 name: Release SFX installer
 
 # Builds a self-extracting Windows EXE and publishes it to the release.
-# Trigger: push any tag matching v*. Example: git tag v1.0.0 && git push --tags
+# Triggers:
+#   - push to main: validation run (regenerate, verify, download+verify the
+#     nightly zip, assemble the SFX) without publishing.
+#   - push any tag matching v*: same build, then publishes the EXE + SHA256
+#     to the release. Example: git tag v1.0.0 && git push --tags
 #
 # Security notes:
 #   - The EXE is unsigned, so Windows SmartScreen will warn once. That is
@@ -14,6 +18,8 @@ name: Release SFX installer
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
 
@@ -96,6 +102,7 @@ jobs:
           Get-Item $exeName, SHA256SUMS.txt | Select-Object Name, Length
 
       - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/')
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
