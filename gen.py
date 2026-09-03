@@ -123,28 +123,49 @@ function Write-Ok  ([string]$m) { Write-Host "    $m" -ForegroundColor Green }
 function Write-Warn([string]$m) { Write-Host "    WARN: $m" -ForegroundColor Yellow }
 
 # ---------------------------------------------------------------- python
-# Python 3.x is a prerequisite for Open WebUI. We do not install it: stop with
-# instructions if the py launcher or a real python.exe is missing.
+# Python 3.11 or 3.12 is required for Open WebUI (its metadata refuses 3.13+).
+# We do not install it here; prefer the py launcher (3.12), skip the Store stub.
 $pyPath = ""
 if (Get-Command py -ErrorAction SilentlyContinue) {
-    $pyPath = (py -3 -c "import sys; print(sys.executable)").Trim()
+    $null = py -3.12 -c "import sys" 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        $pyPath = (py -3.12 -c "import sys; print(sys.executable)").Trim()
+    } else {
+        $null = py -3 -c "import sys" 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            $pyPath = (py -3 -c "import sys; print(sys.executable)").Trim()
+        }
+    }
 }
 if (-not $pyPath -and (Get-Command python -ErrorAction SilentlyContinue)) {
     $p = (python -c "import sys; print(sys.executable)").Trim()
     if ($p -and ($p -notmatch "WindowsApps")) { $pyPath = $p }
 }
 if (-not $pyPath) {
-    Write-Warn "Python 3.x is required for Open WebUI and was not found."
-    Write-Warn "Install it yourself (winget install Python.Python.3.12, or from python.org),"
-    Write-Warn "then re-run this script. It is only used by the venv under webui\venv."
+    Write-Warn "Python 3.11 or 3.12 is required for Open WebUI and was not found."
+    Write-Warn "Install Python 3.12 (winget install Python.Python.3.12, or from python.org) and re-run."
+    exit 1
+}
+$ver = (& $pyPath -c "import sys; print('%d.%d' % sys.version_info[:2])").Trim()
+if ($ver -notmatch "^3\.1[12]$") {
+    Write-Warn "found python $ver, but open-webui supports only Python 3.11/3.12."
+    Write-Warn "Install Python 3.12, delete webui\venv if it exists, then re-run this script."
     exit 1
 }
 $pyPath = (Resolve-Path $pyPath).Path
-Write-Ok "python: $pyPath"
+Write-Ok "python: $pyPath ($ver)"
 
 # ---------------------------------------------------------------- venv + open-webui
 New-Item -ItemType Directory -Force -Path $webui | Out-Null
-if (-not (Test-Path (Join-Path $venv "Scripts\python.exe"))) {
+$venvPy = Join-Path $venv "Scripts\python.exe"
+if (Test-Path $venvPy) {
+    $vver = (& $venvPy -c "import sys; print('%d.%d' % sys.version_info[:2])").Trim()
+    if ($vver -ne $ver) {
+        Write-Warn "existing webui\venv uses python $vver; removing it to rebuild with $ver..."
+        Remove-Item $venv -Recurse -Force
+    }
+}
+if (-not (Test-Path $venvPy)) {
     & $pyPath -m venv $venv
     if ($LASTEXITCODE -ne 0) { throw "venv creation failed" }
 }
