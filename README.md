@@ -91,7 +91,9 @@ No service and no auto-start. Run it when you need it:
 
 A console window opens with the menu. Option 1 starts the router in that same window and its logs stream there. Close the window or press Ctrl+C and the server stops.
 
-Point OpenAI-compatible clients (omp, opencode, etc.) at `http://127.0.0.1:8081/v1` with model `omp-agent`, `opencode-agent` or `qwen-chat`.
+Chat from any device on the LAN (phone, etc.): while the router is running, open `http://<host-ip>:8081/` in a browser and pick `chat` in the model dropdown. That preset is the daily-chat Qwen3 model at half the tuned context (83328), so it loads quickly and leaves headroom. Same address works on the host as `http://127.0.0.1:8081/`.
+
+Point OpenAI-compatible clients (omp, opencode, etc.) at `http://127.0.0.1:8081/v1` with model `omp-agent`, `opencode-agent`, `qwen-chat` or `chat`.
 
 ## Menu
 
