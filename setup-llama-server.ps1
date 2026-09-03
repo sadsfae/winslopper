@@ -568,16 +568,30 @@ if (-not $NoShortcut) {
 }
 
 # ---------------------------------------------------------------- firewall
+# Add the inbound rule for LAN access. Requires elevation, so when setup is
+# not running as admin it launches a tiny elevated helper (one UAC prompt)
+# that creates only this rule; -SkipFirewall skips this stage entirely.
 if (-not $SkipFirewall) {
     $ruleName = "llama-server-$svcPort"
     $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-    if (-not $isAdmin) {
-        Write-Warn "not elevated - skipping firewall rule (re-run as admin to open inbound TCP $svcPort)"
-    } elseif (Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue) {
+    $existing = Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
+    if ($existing) {
         Write-Ok "firewall rule '$ruleName' already present"
-    } else {
+    } elseif ($isAdmin) {
         New-NetFirewallRule -DisplayName $ruleName -Direction Inbound -Protocol TCP -LocalPort $svcPort -Action Allow -Profile Any | Out-Null
         Write-Ok "added inbound firewall rule for TCP $svcPort"
+    } else {
+        $helper = Join-Path $env:TEMP "winslopper-firewall-$([guid]::NewGuid().ToString('N')).ps1"
+        Set-Content -Path $helper -Value "New-NetFirewallRule -DisplayName '$ruleName' -Direction Inbound -Protocol TCP -LocalPort $svcPort -Action Allow -Profile Any | Out-Null" -Encoding ASCII
+        Write-Host "asking for permission to open inbound TCP $svcPort on the Windows firewall (UAC)..."
+        $elv = Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File',"`"$helper`"" -Wait -PassThru
+        Remove-Item -Path $helper -Force -ErrorAction SilentlyContinue
+        if ($elv.ExitCode -eq 0) {
+            Write-Ok "added inbound firewall rule for TCP $svcPort"
+        } else {
+            Write-Warn "firewall rule not added (UAC declined); add it manually in an elevated PowerShell:"
+            Write-Warn "New-NetFirewallRule -DisplayName $ruleName -Direction Inbound -Protocol TCP -LocalPort $svcPort -Action Allow -Profile Any"
+        }
     }
 }
 

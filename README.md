@@ -77,7 +77,7 @@ llama-server.lnk            desktop shortcut (created by setup)
 
 ## One-click release EXE
 
-Pushing a tag (`v*`) triggers the `release-sfx.yml` GitHub Actions workflow: it regenerates and verifies the setup script, downloads the pinned llama.cpp CUDA 13.3 zip, verifies its SHA-256 against the GitHub API, and packs the zip plus the setup script into a self-extracting EXE with IExpress (built into Windows, no third-party extractor). Running the EXE extracts to a temporary folder, opens a console window that streams the setup log, installs to `%USERPROFILE%\winslopper_RTX5090TI` (unelevated, no prompts except Windows Firewall when run elevated), then cleans up temporary files. The result behaves exactly like the folder install. Downloads and the plain `.ps1` remain the manual alternative.
+Pushing a tag (`v*`) triggers the `release-sfx.yml` GitHub Actions workflow: it regenerates and verifies the setup script, downloads the pinned llama.cpp CUDA 13.3 zip, verifies its SHA-256 against the GitHub API, and packs the zip plus the setup script into a self-extracting EXE with IExpress (built into Windows, no third-party extractor). Running the EXE extracts to a temporary folder, opens a console window that streams the setup log, installs to `%USERPROFILE%\winslopper_RTX5090TI` (unelevated), then cleans up temporary files. When the inbound firewall rule is missing, setup asks once via UAC whether to open TCP 8081 for LAN access (`-SkipFirewall` or declining skips it). The result behaves exactly like the folder install. Downloads and the plain `.ps1` remain the manual alternative.
 
 SmartScreen: the EXE is unsigned, so Windows shows "Windows protected your PC" once (More info > Run anyway). This is expected for personal builds; a paid code-signing certificate is the only way to suppress it. Always compare the published SHA-256 before running, and prefer running the `.ps1` path if you distrust the artifact.
 
@@ -138,8 +138,7 @@ Compared to Open WebUI it is intentionally simpler: single user, no accounts, hi
 ## Firewall
 
 - The server binds `0.0.0.0:8081`. For localhost use no rule is needed.
-- The release EXE installs unelevated, so setup does not create the inbound rule. The folder-based setup creates it only when run from an elevated PowerShell.
-- To reach the server from other machines on your LAN, run this once in an elevated PowerShell (right-click > Run as administrator):
+- Setup creates the inbound rule itself: it asks once via UAC when it is not already running elevated (`-SkipFirewall` skips this). If the prompt is declined, or you prefer a rule scoped to your LAN only, run this in an elevated PowerShell (right-click > Run as administrator):
   ```powershell
   New-NetFirewallRule -DisplayName "llama-server TCP 8081" -Direction Inbound -Protocol TCP -LocalPort 8081 -Action Allow -Profile Private
   ```
