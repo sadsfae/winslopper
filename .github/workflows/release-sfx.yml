@@ -22,21 +22,20 @@ name: Release SFX installer
 
 on:
   push:
-    # Validation runs on main, only for code/config changes. A push that
-    # touches only README/LICENSE/THIRD_PARTY_NOTICES/docs is skipped.
-    - branches:
-        - main
-      paths:
-        - 'gen.py'
-        - 'setup-llama-server.ps1'
-        - 'src/**'
-        - 'tools/**'
-        - '.github/**'
-        - '.gitattributes'
-    # Release builds on any tag push, path filter intentionally not applied:
-    # tags are explicit release actions.
-    - tags:
-        - 'v*'
+    branches:
+      - main
+    tags:
+      - 'v*'
+    # Validation runs on main only for code/config changes; a push touching
+    # only README/LICENSE/THIRD_PARTY_NOTICES/docs is skipped. Path filters
+    # are not evaluated for tag pushes, so tags always build and release.
+    paths:
+      - 'gen.py'
+      - 'setup-llama-server.ps1'
+      - 'src/**'
+      - 'tools/**'
+      - '.github/**'
+      - '.gitattributes'
 
 permissions:
   contents: write
