@@ -27,6 +27,7 @@ assert "@@TEMPLATE@@" in ported_ini
 
 BAT_LAUNCHER = """@echo off
 setlocal
+title llama-server
 cd /d "%~dp0"
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0llama-server.ps1" %*
 """
@@ -348,7 +349,7 @@ if (-not $NoShortcut) {
     $lnk = $ws.CreateShortcut($lnkPath)
     $lnk.TargetPath = $batFile
     $lnk.WorkingDirectory = $root
-    $lnk.IconLocation = "$exe,0"
+    $lnk.IconLocation = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe,0"
     $lnk.Description = "llama.cpp router server on port $svcPort"
     $lnk.Save()
     Write-Ok "desktop shortcut: $lnkPath"
