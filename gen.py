@@ -368,7 +368,7 @@ else { foreach ($m in $missing) { Write-Warn "missing: $m" } }
 # ---------------------------------------------------------------- launcher + menu
 Write-Step "Generating llama-server.bat launcher and control menu"
 __BAT_LAUNCHER_PS__
-[IO.File]::WriteAllText($batFile, $batText, (New-Object System.Text.ASCIIEncoding))
+[IO.File]::WriteAllText($batFile, ($batText -replace "`r?`n", "`r`n"), (New-Object System.Text.ASCIIEncoding))
 Write-Ok "wrote $batFile"
 __MENU_PS__
 [IO.File]::WriteAllText($menuFile, $menuText, (New-Object System.Text.UTF8Encoding($false)))
@@ -423,7 +423,9 @@ PS = (
 )
 
 out = BASE / "setup-llama-server.ps1"
-out.write_text(PS, encoding="utf-8-sig")  # BOM so PowerShell 5.1 parses UTF-8
+# BOM + LF bytes, identical on every platform (write_text would
+# translate \n to CRLF on Windows and break byte-exact verification)
+out.write_bytes(b"\xef\xbb\xbf" + PS.encode("utf-8"))
 if any(ord(c) > 127 for c in PS):
     raise SystemExit("generated script is not pure ASCII; check embedded content")
 print(f"wrote {out} ({out.stat().st_size} bytes)")

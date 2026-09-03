@@ -18,7 +18,7 @@ spec.loader.exec_module(gen)
 
 raw = (REPO / "setup-llama-server.ps1").read_bytes()
 assert raw.startswith(b"\xef\xbb\xbf"), "missing BOM"
-ps = raw.decode("utf-8-sig")
+ps = raw.decode("utf-8-sig").replace("\r\n", "\n")
 assert all(ord(c) < 128 for c in ps), "non-ASCII found"
 
 for i, line in enumerate(ps.splitlines(), 1):

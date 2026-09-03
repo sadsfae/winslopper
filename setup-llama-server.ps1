@@ -472,7 +472,7 @@ title llama-server
 cd /d "%~dp0"
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0llama-server.ps1" %*
 '@
-[IO.File]::WriteAllText($batFile, $batText, (New-Object System.Text.ASCIIEncoding))
+[IO.File]::WriteAllText($batFile, ($batText -replace "`r?`n", "`r`n"), (New-Object System.Text.ASCIIEncoding))
 Write-Ok "wrote $batFile"
 $menuText = @'
 # llama.cpp router control menu (port 8081)
