@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Generate setup-llama-server.ps1 embedding natureboy's router config and
-chat template (with Linux -> Windows path translation). Deterministic."""
+chat template (with Linux -> Windows path translation), plus a PowerShell
+control menu (start/stop/status) and a small .bat launcher. Deterministic."""
 
 import hashlib
 import pathlib
@@ -13,8 +14,8 @@ jinja = (SRC / "qwen-fixed.jinja").read_text(encoding="utf-8", newline="")
 sha = hashlib.sha256(jinja.encode("utf-8")).hexdigest()
 expected_sha = "55d4931433fe502b794226ee7f4d206a6bdd436ac9f80eb7d8ebb4c639f9ea0c"
 assert sha == expected_sha, f"template sha mismatch: {sha}"
-# source template has NO trailing newline (ends with "#}\n"... actually ends "#}")
-# so the writer must trim the here-string's terminator newline
+# source template has NO trailing newline; the writer trims the here-string's
+# terminator newline to stay byte-exact
 tmpl_has_trailing_nl = jinja.endswith("\n")
 tmpl_write_rhs = "$tmplText.TrimEnd(\"`n\")" if not tmpl_has_trailing_nl else "$tmplText"
 
@@ -24,7 +25,78 @@ assert "@@MODELS@@" in ported_ini
 ported_ini = ported_ini.replace("/home/wfoster/llm/models/qwen-fixed.jinja", "@@TEMPLATE@@")
 assert "@@TEMPLATE@@" in ported_ini
 
+BAT_LAUNCHER = """@echo off
+setlocal
+cd /d "%~dp0"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0llama-server.ps1" %*
+"""
+
+MENU_PS = """# llama.cpp router control menu (port 8081)
+$ErrorActionPreference = "SilentlyContinue"
+$root   = $PSScriptRoot
+$exe    = Join-Path $root "llama\\llama-server.exe"
+$preset = Join-Path $root "llm\\models\\router-config.ini"
+$port   = 8081
+$health = "http://127.0.0.1:$port/health"
+
+function Test-ServerRunning { return [bool](Get-Process -Name llama-server -ErrorAction SilentlyContinue) }
+function Get-ServerStatus {
+    $h = "down"
+    try { $h = (Invoke-WebRequest -UseBasicParsing -Uri $health -TimeoutSec 3).Content } catch {}
+    return $h
+}
+function Start-Server {
+    if (Test-ServerRunning) { Write-Host "llama-server is already running"; return }
+    if (-not (Test-Path $exe)) { Write-Host "llama-server.exe not found - run setup-llama-server.ps1 first"; return }
+    Write-Host ""
+    Write-Host "Starting llama-server on 0.0.0.0:$port (logs below; close this window or Ctrl+C to stop)..."
+    & $exe --port $port --host 0.0.0.0 --models-preset "$preset" --models-max 1 --cache-type-k q8_0 --cache-type-v q8_0
+    Write-Host ""
+    Write-Host "server stopped; cleaning up any leftover model servers..."
+    taskkill /IM llama-server.exe /F 2>$null | Out-Null
+}
+function Stop-Server {
+    taskkill /IM llama-server.exe /F 2>$null | Out-Null
+    Start-Sleep -Milliseconds 300
+    if (Test-ServerRunning) { Write-Host "failed to stop" } else { Write-Host "stopped" }
+}
+function Show-Status {
+    $h = Get-ServerStatus
+    if (Test-ServerRunning) { Write-Host "running ($h)" } else { Write-Host "stopped" }
+}
+
+if ($args.Count -gt 0) {
+    switch ($args[0]) {
+        "start"   { Start-Server }
+        "stop"    { Stop-Server }
+        "restart" { Stop-Server; Start-Server }
+        "status"  { Show-Status }
+        default   { Write-Host "usage: llama-server.ps1 [start|stop|restart|status]  (no args = menu)" }
+    }
+    exit 0
+}
+
+while ($true) {
+    Write-Host ""
+    Write-Host "llama.cpp router on 0.0.0.0:$port"
+    Write-Host "  1) Start server - logs stream in this window; closing it stops"
+    Write-Host "  2) Stop server"
+    Write-Host "  3) Status"
+    Write-Host "  0) Exit / close window"
+    $k = Read-Host "choose [0-3]"
+    switch ($k) {
+        "1" { Start-Server }
+        "2" { Stop-Server }
+        "3" { Show-Status }
+        "0" { exit 0 }
+        default { Write-Host "unknown choice" }
+    }
+}
+"""
+
+assert "'@" not in BAT_LAUNCHER and "'@" not in MENU_PS
 assert "'@" not in jinja and "'@" not in ported_ini, "here-string terminator collision"
+assert all(ord(c) < 128 for c in (BAT_LAUNCHER + MENU_PS)), "menu/launcher must be pure ASCII"
 
 
 def ps_here_string(label, body):
@@ -35,6 +107,8 @@ def ps_here_string(label, body):
     return f"${label} = @'\n{body[:-1]}\n'@"
 
 
+launcher_var = ps_here_string("batText", BAT_LAUNCHER)
+menu_var = ps_here_string("menuText", MENU_PS)
 tmpl_var = ps_here_string("tmplText", jinja)
 preset_var = ps_here_string("presetText", ported_ini)
 
@@ -53,10 +127,17 @@ PS = r"""#Requires -Version 5.1
       .\llm\models\router-config.ini router preset, same as natureboy's file,
                                      with Windows paths
       .\llm\models\qwen-fixed.jinja  chat template, byte-identical to natureboy
-      .\llama-server.bat             start / stop / restart / status for a
-                                     foreground console session
+      .\llama-server.bat             launcher -> opens the control menu
+      .\llama-server.ps1             control menu: 1=start, 2=stop, 3=status,
+                                     0=exit (also accepts start/stop/status args)
       .\REMOVE_ME_TO_UPGRADE         upgrade lock (created after first install)
       desktop shortcut               llama-server.lnk -> llama-server.bat
+
+    Menu behaviour:
+      Option 1 runs llama-server in this same console window: its logs stream
+      to the window, and closing the window or Ctrl+C stops the server (any
+      child model servers are cleaned up afterwards). So a permanently open
+      window = a running server, exactly like a foreground systemd service.
 
     Nightly / upgrade lock:
       The first successful install downloads a llama.cpp nightly zip, extracts
@@ -68,16 +149,17 @@ PS = r"""#Requires -Version 5.1
       replaced, and the lock file is re-created.
 
     systemd -> Windows mapping:
-      Type=simple, ExecStart ...        foreground console (llama-server.bat)
-      Restart=always / RestartSec=10    no equivalent; Ctrl+C or `stop` to quit
+      Type=simple, ExecStart ...        menu option 1 (foreground console)
+      Restart=always / RestartSec=10    no equivalent; close window / option 2
       LimitMEMLOCK=infinity             N/A (no memory lock; router mode does
                                         not use --mlock)
-      WantedBy=default.target          put the shortcut in shell:startup to
-                                        auto-start at logon
+      WantedBy=default.target          put llama-server.bat (or a shortcut to
+                                       "llama-server.ps1 start") in
+                                       shell:startup to auto-start at logon
 
     Idempotent: safe to re-run. Download/extract is skipped when the same build
-    marker is present (-Force to redo); config/template/bat are regenerated
-    deterministically on every run.
+    marker is present (-Force to redo); config/template/launcher/menu are
+    regenerated deterministically on every run.
 
 .PARAMETER Build
     llama.cpp nightly build tag. Default b10786, used for the first install.
@@ -132,6 +214,7 @@ $tmpl     = Join-Path $llmDir "qwen-fixed.jinja"
 $marker   = Join-Path $llamaDir ".llama-version"
 $lockFile = Join-Path $root "REMOVE_ME_TO_UPGRADE"
 $batFile  = Join-Path $root "llama-server.bat"
+$menuFile = Join-Path $root "llama-server.ps1"
 $tmplSha  = "55d4931433fe502b794226ee7f4d206a6bdd436ac9f80eb7d8ebb4c639f9ea0c"
 $svcPort  = 8081
 $ModelsDir = $ModelsDir.TrimEnd("\")
@@ -250,53 +333,14 @@ foreach ($line in ($presetText -split "`r?`n")) {
 if ($missing.Count -eq 0) { Write-Ok "all models present" }
 else { foreach ($m in $missing) { Write-Warn "missing: $m" } }
 
-# ---------------------------------------------------------------- batch + shortcut
-Write-Step "Generating llama-server.bat"
-$bat = @"
-@echo off
-setlocal
-cd /d "%~dp0"
-
-set "LLAMA_EXE=$exe"
-set "PRESET=$preset"
-
-if "%~1"==""   goto start
-if /i "%~1"=="start"   goto start
-if /i "%~1"=="stop"    goto stop
-if /i "%~1"=="restart" goto restart
-if /i "%~1"=="status"  goto status
-echo usage: llama-server.bat [start ^| stop ^| restart ^| status]
-exit /b 1
-
-:start
-if exist "%LLAMA_EXE%" goto run
-echo llama-server.exe not found - run setup-llama-server.ps1 first.
-exit /b 1
-
-:run
-echo Starting llama-server on 0.0.0.0:$svcPort ^(Ctrl+C or close this window to stop^)...
-"%LLAMA_EXE%" --port $svcPort --host 0.0.0.0 --models-preset "%PRESET%" --models-max 1 --cache-type-k q8_0 --cache-type-v q8_0
-set "RC=%errorlevel%"
-REM close-out: stop model child servers the router spawned, if any survive
-taskkill /IM llama-server.exe /F >nul 2>&1
-exit /b %RC%
-
-:stop
-taskkill /IM llama-server.exe /T /F >nul 2>&1
-echo stopped
-exit /b 0
-
-:restart
-call :stop
-timeout /t 2 /nobreak >nul
-call :run
-exit /b %errorlevel%
-
-:status
-powershell -NoProfile -Command "try { (Invoke-WebRequest -UseBasicParsing http://127.0.0.1:$svcPort/health -TimeoutSec 3).Content } catch { 'down' }"
-@"
-[IO.File]::WriteAllText($batFile, $bat, (New-Object System.Text.ASCIIEncoding))
+# ---------------------------------------------------------------- launcher + menu
+Write-Step "Generating llama-server.bat launcher and control menu"
+__BAT_LAUNCHER_PS__
+[IO.File]::WriteAllText($batFile, $batText, (New-Object System.Text.ASCIIEncoding))
 Write-Ok "wrote $batFile"
+__MENU_PS__
+[IO.File]::WriteAllText($menuFile, $menuText, (New-Object System.Text.UTF8Encoding($false)))
+Write-Ok "wrote $menuFile"
 
 if (-not $NoShortcut) {
     $lnkPath = Join-Path ([Environment]::GetFolderPath("Desktop")) "llama-server.lnk"
@@ -327,12 +371,12 @@ if (-not $SkipFirewall) {
 # ---------------------------------------------------------------- summary
 Write-Host ""
 Write-Host "Setup complete." -ForegroundColor Green
-Write-Host "  Start   : .\llama-server.bat             (or double-click the desktop shortcut)"
-Write-Host "  Stop    : .\llama-server.bat stop        (or Ctrl+C in the running console)"
-Write-Host "  Restart : .\llama-server.bat restart"
-Write-Host "  Status  : .\llama-server.bat status      (or http://127.0.0.1:$svcPort/health)"
+Write-Host "  Run     : .\llama-server.bat  (opens the control menu)"
+Write-Host "  Menu    : 1 = start server (logs stream in the window), 2 = stop, 3 = status, 0 = exit"
+Write-Host "  Close   : closing the window or Ctrl+C stops the server"
+Write-Host "  Direct  : .\llama-server.ps1 start|stop|restart|status"
+Write-Host "  Health  : http://127.0.0.1:$svcPort/health"
 Write-Host "  Config  : $preset"
-Write-Host "  Logs    : shown in the console while the server runs"
 Write-Host "  Upgrade : delete $lockFile and re-run this script to update llama.cpp"
 Write-Host "  Auto-start at logon: put a shortcut to $batFile in shell:startup"
 """
@@ -341,6 +385,8 @@ PS = (
     PS.replace("__PRESET_PS__", preset_var, 1)
     .replace("__TMPL_PS__", tmpl_var, 1)
     .replace("__TMPL_WRITE__", tmpl_write_rhs, 1)
+    .replace("__BAT_LAUNCHER_PS__", launcher_var, 1)
+    .replace("__MENU_PS__", menu_var, 1)
 )
 
 out = BASE / "setup-llama-server.ps1"
