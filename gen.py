@@ -46,7 +46,6 @@ $exe    = Join-Path $root "llama\\llama-server.exe"
 $preset = Join-Path $root "llm\\models\\router-config.ini"
 $port   = 8081
 $health = "http://127.0.0.1:$port/health"
-$webui  = "http://127.0.0.1:$port"
 
 function Test-ServerRunning { return [bool](Get-Process -Name llama-server -ErrorAction SilentlyContinue) }
 function Get-ServerHealth {
@@ -74,25 +73,15 @@ function Stop-Server {
 }
 function Show-Status {
     if (-not (Test-ServerRunning)) { Write-Host "stopped"; return }
-    if (Get-ServerHealth) { Write-Host "running and healthy ($webui)" } else { Write-Host "running (starting? health not ok yet)" }
+    if (Get-ServerHealth) { Write-Host "running and healthy" } else { Write-Host "running (starting? health not ok yet)" }
 }
-function Show-WebChat {
-    if (-not (Test-ServerRunning)) { Write-Host "llama-server is not running - start it first (option 1)"; return }
-    if (-not (Get-ServerHealth)) { Write-Host "server is up but not healthy yet (still loading); wait a moment and retry"; return }
-    Write-Host ""
-    Write-Host "Opening web chat: $webui" -ForegroundColor Green
-    Write-Host "  pick model 'qwen-chat' in the dropdown; the UI is served by llama-server itself"
-    Start-Process $webui
-}
-
 if ($args.Count -gt 0) {
     switch ($args[0]) {
         "start"   { Start-Server }
         "stop"    { Stop-Server }
         "restart" { Stop-Server; Start-Server }
         "status"  { Show-Status }
-        "web"     { Show-WebChat }
-        default   { Write-Host "usage: llama-server.ps1 [start|stop|restart|status|web]  (no args = menu)" }
+        default   { Write-Host "usage: llama-server.ps1 [start|stop|restart|status]  (no args = menu)" }
     }
     exit 0
 }
@@ -103,14 +92,12 @@ while ($true) {
     Write-Host "  1) Start server - logs stream in this window; closing it stops"
     Write-Host "  2) Stop server"
     Write-Host "  3) Status"
-    Write-Host "  4) Open web chat: $webui (needs the server running)"
     Write-Host "  0) Exit / close window"
-    $k = Read-Host "choose [0-4]"
+    $k = Read-Host "choose [0-3]"
     switch ($k) {
         "1" { Start-Server }
         "2" { Stop-Server }
         "3" { Show-Status }
-        "4" { Show-WebChat }
         "0" { exit 0 }
         default { Write-Host "unknown choice" }
     }
@@ -155,7 +142,7 @@ PS = r"""#Requires -Version 5.1
       .\llm\models\qwen-fixed.jinja  chat template, byte-identical to natureboy
       .\llama-server.bat             launcher -> opens the control menu
       .\llama-server.ps1             control menu: 1=start, 2=stop, 3=status,
-                                     4=web chat, 0=exit (also subcommands)
+                                     0=exit (also subcommands)
       .\REMOVE_ME_TO_UPGRADE         upgrade lock (created after first install)
       desktop shortcut               llama-server.lnk -> llama-server.bat
 
@@ -453,7 +440,7 @@ if (-not $SkipFirewall) {
 Write-Host ""
 Write-Host "Setup complete." -ForegroundColor Green
 Write-Host "  Run     : .\llama-server.bat  (opens the control menu)"
-Write-Host "  Menu    : 1 = start server (logs stream in the window), 2 = stop, 3 = status, 4 = web chat, 0 = exit"
+Write-Host "  Menu    : 1 = start server (logs stream in the window), 2 = stop, 3 = status, 0 = exit"
 Write-Host "  Close   : closing the window or Ctrl+C stops the server"
 Write-Host "  Direct  : .\llama-server.ps1 start|stop|restart|status|web"
 Write-Host "  Health  : http://127.0.0.1:$svcPort/health"
