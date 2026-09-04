@@ -172,15 +172,29 @@ if (-not (Test-Path $venvPy)) {
 }
 $vp = Join-Path $venv "Scripts\python.exe"
 & $vp -m pip install --upgrade pip --quiet
+# open-webui ships a py3-none-any wheel with the prebuilt frontend AND a
+# source tarball (backend only: version 0.0.0, no UI). Force the wheel so we
+# never end up with a broken source install; --only-binary fails loudly if a
+# wheel is unavailable for this platform.
 if ($Upgrade) {
-    & $vp -m pip install --upgrade open-webui
-    if ($LASTEXITCODE -ne 0) { throw "pip upgrade open-webui failed" }
+    & $vp -m pip install --only-binary :all: --upgrade open-webui
+    if ($LASTEXITCODE -ne 0) { throw "pip upgrade open-webui failed (no wheel for this platform?)" }
     Write-Ok "open-webui updated to the latest version inside $venv"
 } else {
-    & $vp -m pip install open-webui
-    if ($LASTEXITCODE -ne 0) { throw "pip install open-webui failed" }
+    & $vp -m pip install --only-binary :all: open-webui
+    if ($LASTEXITCODE -ne 0) { throw "pip install open-webui failed (no wheel for this platform?)" }
     Write-Ok "open-webui installed (venv: $venv)"
 }
+# sanity check: the official wheel embeds the frontend and the real version.
+$owSite = Join-Path $venv "Lib\site-packages\open_webui"
+$owVer = (& $vp -c "import importlib.metadata; print(importlib.metadata.version('open-webui'))").Trim()
+if ($owVer -eq "0.0.0" -or -not (Test-Path (Join-Path $owSite "static"))) {
+    Write-Warn "open-webui looks like a source build (version $owVer, no frontend); the server would run in API-only mode."
+    Write-Warn "Reinstall from the official wheel:"
+    Write-Warn "  $vp -m pip install --force-reinstall --only-binary :all: open-webui"
+    exit 1
+}
+Write-Ok "open-webui $owVer with frontend OK"
 
 # llama-chat.ps1, llama-chat.bat and the llama-chat desktop shortcut are
 # already created by setup-llama-server.ps1; this script only installs the

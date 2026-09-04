@@ -136,6 +136,10 @@ Daily use:
 - Double-click the `llama-chat` desktop icon. Its own persistent terminal window shows a menu: 1 start the chat server (logs stream in the window), 2 stop, 3 status, 0 exit; closing the window also stops it. Nothing runs until you start it.
 - With the router running, open `http://<host-ip>:8080` from any device; first run creates a local account. The UI talks to the router at `http://127.0.0.1:8081/v1` with model `qwen-chat`; enable Web Search under Settings > Web Search for tool calls.
 - Updating Open WebUI: run `.\setup-webui.ps1 -Upgrade` (upgrades it inside `webui\venv`; pip never touches your system Python), then restart the chat from the menu (2 then 1). A plain re-run of `setup-webui.ps1` does not update anything - use `-Upgrade`. The manual equivalent, if you prefer (or your install predates the `-Upgrade` switch):
+- Open WebUI must come from the official wheel (it embeds the web frontend). A source install shows `v0.0.0` and runs in API-only mode; fix it with:
+  ```
+  %USERPROFILE%\winslopper\webui\venv\Scripts\python.exe -m pip install --force-reinstall --only-binary :all: open-webui
+  ```
   ```
   %USERPROFILE%\winslopper\webui\venv\Scripts\python.exe -m pip install -U open-webui
   ```
