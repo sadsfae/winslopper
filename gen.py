@@ -179,16 +179,15 @@ $vp = Join-Path $venv "Scripts\python.exe"
 # frontend), or when -Upgrade is requested. The global pip cache is left alone.
 $owSite = Join-Path $venv "Lib\site-packages\open_webui"
 $owSiteStatic = Join-Path $owSite "static"
+# probe the installed version; silence stderr so a missing package can never
+# leak a python traceback into the setup output.
 $owVer = ""
-try {
-    $owVer = (& $vp -c "import importlib.metadata; print(importlib.metadata.version('open-webui'))").Trim()
-} catch {
-    $owVer = ""
-}
+$owProbe = (& $vp -c "import importlib.metadata; print(importlib.metadata.version('open-webui'))" 2>$null)
+if ($owProbe) { $owVer = ($owProbe | Select-Object -Last 1).Trim() }
 $needRepair = $Upgrade -or (-not $owVer) -or ($owVer -eq "0.0.0") -or (-not (Test-Path $owSiteStatic))
 if ($needRepair) {
-    $reason = "not installed"
-    if ($owVer -eq "0.0.0" -or -not (Test-Path $owSiteStatic)) { $reason = "broken source build installed ($owVer, no frontend) - cleaning it up" }
+    $reason = "not installed or unreadable install"
+    if (($owVer -eq "0.0.0" -or -not (Test-Path $owSiteStatic)) -and $owVer) { $reason = "broken source build detected (v$owVer, no frontend)" }
     elseif ($Upgrade) { $reason = "-Upgrade requested" }
     Write-Host "open-webui: $reason; reinstalling from the official wheel..."
     & $vp -m pip install --force-reinstall --only-binary :all: open-webui
@@ -197,7 +196,9 @@ if ($needRepair) {
     Write-Ok "open-webui already installed and healthy (v$owVer); nothing to do (use -Upgrade to update)"
 }
 # final sanity: the official wheel embeds the frontend and the real version.
-$owVerNew = (& $vp -c "import importlib.metadata; print(importlib.metadata.version('open-webui'))").Trim()
+$owVerNew = ""
+$owProbeNew = (& $vp -c "import importlib.metadata; print(importlib.metadata.version('open-webui'))" 2>$null)
+if ($owProbeNew) { $owVerNew = ($owProbeNew | Select-Object -Last 1).Trim() }
 if ($owVerNew -eq "0.0.0" -or -not (Test-Path $owSiteStatic)) {
     Write-Warn "still no healthy open-webui install (version $owVerNew); try:"
     Write-Warn "  $vp -m pip install --force-reinstall --only-binary :all: open-webui"
