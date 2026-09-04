@@ -113,7 +113,10 @@ param(
     [switch]$SkipFirewall,
     [switch]$Upgrade
 )
-$ErrorActionPreference = "Stop"
+# 'Continue' (not 'Stop'): on PowerShell 5.1 a failing native command's stderr
+# becomes a terminating error under Stop and would kill this script mid-run
+# (e.g. pip or a python probe). Real failures are handled via $LASTEXITCODE/throw.
+$ErrorActionPreference = "Continue"
 $root  = $PSScriptRoot
 $webui = Join-Path $root "webui"
 $venv  = Join-Path $webui "venv"
@@ -182,15 +185,21 @@ $owSite = Join-Path $venv "Lib\site-packages\open_webui"
 # (open_webui\static only holds favicons/swagger and is always present, so it
 # is not a reliable health signal).
 $owSiteFrontend = Join-Path $owSite "frontend\index.html"
-# probe the installed version; silence stderr so a missing package can never
-# leak a python traceback into the setup output.
+# Health is checked from the filesystem only - no python subprocess here: a
+# missing package makes python print a traceback to stderr, which PowerShell
+# 5.1 can turn into a terminating error even with 2>$null (seen on the box).
 $owVer = ""
-$owProbe = (& $vp -c "import importlib.metadata; print(importlib.metadata.version('open-webui'))" 2>$null)
-if ($owProbe) { $owVer = ($owProbe | Select-Object -Last 1).Trim() }
+$owDist = Get-ChildItem (Join-Path $owSite "*.dist-info") -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($owDist) {
+    $owMeta = Get-Content (Join-Path $owDist.FullName "METADATA") -ErrorAction SilentlyContinue -TotalCount 30
+    $vLine = $owMeta | Where-Object { $_ -match "^Version:\s*" } | Select-Object -First 1
+    if ($vLine) { $owVer = ($vLine -replace "^Version:\s*", "").Trim() }
+}
 $needRepair = $Upgrade -or (-not $owVer) -or ($owVer -eq "0.0.0") -or (-not (Test-Path $owSiteFrontend))
 if ($needRepair) {
     $reason = "not installed or unreadable install"
-    if (($owVer -eq "0.0.0" -or -not (Test-Path $owSiteFrontend)) -and $owVer) { $reason = "broken source build detected (v$owVer, no frontend)" }
+    if (-not (Test-Path $owSiteFrontend)) { $reason = "missing or broken install (no frontend) - cleaning it up" }
+    elseif ($owVer -eq "0.0.0") { $reason = "broken install (version 0.0.0) - cleaning it up" }
     elseif ($Upgrade) { $reason = "-Upgrade requested" }
     Write-Host "open-webui: $reason; reinstalling from the official wheel..."
     & $vp -m pip install --force-reinstall --only-binary :all: open-webui
@@ -200,8 +209,12 @@ if ($needRepair) {
 }
 # final sanity: the official wheel embeds the frontend and the real version.
 $owVerNew = ""
-$owProbeNew = (& $vp -c "import importlib.metadata; print(importlib.metadata.version('open-webui'))" 2>$null)
-if ($owProbeNew) { $owVerNew = ($owProbeNew | Select-Object -Last 1).Trim() }
+$owDistNew = Get-ChildItem (Join-Path $owSite "*.dist-info") -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($owDistNew) {
+    $owMetaNew = Get-Content (Join-Path $owDistNew.FullName "METADATA") -ErrorAction SilentlyContinue -TotalCount 30
+    $vLineNew = $owMetaNew | Where-Object { $_ -match "^Version:\s*" } | Select-Object -First 1
+    if ($vLineNew) { $owVerNew = ($vLineNew -replace "^Version:\s*", "").Trim() }
+}
 if ($owVerNew -eq "0.0.0" -or -not (Test-Path $owSiteFrontend)) {
     Write-Warn "still no healthy open-webui install (version $owVerNew); try:"
     Write-Warn "  $vp -m pip install --force-reinstall --only-binary :all: open-webui"
@@ -259,7 +272,11 @@ function Get-ChatProcId {
     return $null
 }
 function Start-Chat {
-    if (-not (Test-Path $vp)) { Write-Host "Open WebUI is not installed yet - run setup-webui.ps1 first"; return }
+    # 'open-webui serve' is the supported entry point: it points the frontend at
+    # the wheel-shipped open_webui/frontend (invoking the module directly uses a
+    # dev-only build path and serves API without UI).
+    $owCli = Join-Path $root "webui\venv\Scripts\open-webui.exe"
+    if (-not (Test-Path $owCli)) { Write-Host "Open WebUI is not installed yet - run setup-webui.ps1 first"; return }
     if (Test-ChatRunning) { Write-Host "llama-chat is already running"; return }
     $env:OPENAI_API_BASE_URL = "http://127.0.0.1:8081/v1"
     $env:OPENAI_API_KEY = "noop"
@@ -276,11 +293,10 @@ function Start-Chat {
     }
     Write-Host ""
     Write-Host "Starting Open WebUI on 0.0.0.0:$port (logs below; close this window or Ctrl+C to stop)..."
-    # 'open-webui serve' is the supported entry point: it points the frontend at
-    # the wheel-shipped open_webui/frontend (invoking the module directly uses a
-    # dev-only build path and serves API without UI).
-    $owCli = Join-Path $root "webui\venv\Scripts\open-webui.exe"
+    # surface the failure stream so a crash is visible instead of silently returning
+    $ErrorActionPreference = "Continue"
     & $owCli serve --host 0.0.0.0 --port $port
+    $ErrorActionPreference = "SilentlyContinue"
     Write-Host "open-webui exited; cleaning up leftover process..."
     $proc = Get-ChatProcId
     if ($proc) { Stop-Process -Id $proc -Force -ErrorAction SilentlyContinue }
