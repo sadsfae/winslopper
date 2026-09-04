@@ -278,8 +278,7 @@ reasoning = off
 
 [omp-agent]
 model = @@MODELS@@\Qwen3.8-27B-OBLITERATED-Q4_K_M.gguf
-### SWEET SPOT
-ctx-size = 166656
+ctx-size = 131072
 #fit = on
 ngl = 99
 flash-attn = on
@@ -293,7 +292,7 @@ mmproj = @@MODELS@@\mmproj-model-bf16.gguf
 
 [qwen-chat]
 model = @@MODELS@@\Qwen3.8-27B-OBLITERATED-Q4_K_M.gguf
-ctx-size = 166656
+ctx-size = 65536
 ngl = 99
 flash-attn = on
 mmproj = @@MODELS@@\mmproj-model-bf16.gguf
