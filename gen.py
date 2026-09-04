@@ -236,6 +236,17 @@ function Start-Chat {
     if (Test-ChatRunning) { Write-Host "llama-chat is already running"; return }
     $env:OPENAI_API_BASE_URL = "http://127.0.0.1:8081/v1"
     $env:OPENAI_API_KEY = "noop"
+    # open-webui refuses to start without WEBUI_SECRET_KEY; generate it once and
+    # persist it so the same session key is reused across restarts.
+    if (-not $env:WEBUI_SECRET_KEY) {
+        $keyFile = Join-Path $root "webui\.secret_key"
+        if (Test-Path $keyFile) {
+            $env:WEBUI_SECRET_KEY = (Get-Content $keyFile -Raw).Trim()
+        } else {
+            $env:WEBUI_SECRET_KEY = -join ((65..90) + (97..122) + (48..57) | Get-Random -Count 64 | ForEach-Object { [char]$_ })
+            Set-Content -Path $keyFile -Value $env:WEBUI_SECRET_KEY -Encoding Ascii
+        }
+    }
     Write-Host ""
     Write-Host "Starting Open WebUI on 0.0.0.0:$port (logs below; close this window or Ctrl+C to stop)..."
     & $vp -m open_webui.main --port $port --host 0.0.0.0
