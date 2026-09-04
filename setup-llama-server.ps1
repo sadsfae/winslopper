@@ -314,6 +314,8 @@ model = @@MODELS@@\Dolphin3.0-Mistral-24B-Q4_K_M.gguf
 fit = on
 ngl = 32
 flash-attn = on
+### Enable the Jinja engine so Open WebUI tool/function calls work
+jinja = on
 
 [dolphin-light]
 model = @@MODELS@@\dolphin-2.9-llama3-8b-Q5_K_M.gguf
@@ -321,6 +323,8 @@ model = @@MODELS@@\dolphin-2.9-llama3-8b-Q5_K_M.gguf
 fit = on
 ngl = 99
 flash-attn = on
+### Enable the Jinja engine so Open WebUI tool/function calls work
+jinja = on
 '@
 $presetText = $presetText.Replace('@@MODELS@@', $ModelsDir).Replace('@@TEMPLATE@@', $tmpl)
 [IO.File]::WriteAllText($preset, $presetText, (New-Object System.Text.UTF8Encoding($false)))
