@@ -296,18 +296,6 @@ chat-template-file = @@TEMPLATE@@
 reasoning = off
 
 ; ------------------------------------------------------------
-; Open WebUI chat model: same profile as omp-agent
-; ------------------------------------------------------------
-[qwen-chat]
-model = @@MODELS@@\Qwen3.8-27B-OBLITERATED-Q4_K_M.gguf
-ctx-size = 16384
-ngl = 56
-flash-attn = on
-jinja = on
-chat-template-file = @@TEMPLATE@@
-reasoning = off
-
-; ------------------------------------------------------------
 ; OPTIONAL extra flavors. Loaded on demand only, and each load
 ; swaps out the Qwen slot, so only use when you actually want
 ; that personality. Not part of the agent fallback path.
