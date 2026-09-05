@@ -731,7 +731,7 @@ if (-not $SkipFirewall) {
 Write-Host ""
 Write-Ok "Open WebUI ready. Start it any time with the llama-chat desktop icon (or llama-chat.bat)."
 Write-Ok "Open http://<host-ip>:$port from any device; first run creates a local account."
-Write-Ok "It talks to the router at http://127.0.0.1:8081/v1 (model qwen-chat)."
+Write-Ok "It talks to the router at http://127.0.0.1:8081/v1; pick an available preset as the model."
 Write-Ok "Web search tools are enabled in the UI: Settings > Web Search. Close llama-chat when unused to free its ~300 MB RAM."
 Write-Ok "Updating later: run .\setup-webui.ps1 -Upgrade (stays inside the venv), then in the llama-chat menu press 2 then 1."
 '@
