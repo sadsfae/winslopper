@@ -268,19 +268,25 @@ $presetText = @'
 model = @@MODELS@@\Qwen3.8-27B-OBLITERATED-Q4_K_M.gguf
 ; smaller ctx so KV fits alongside running apps
 ctx-size = 16384
-; moderate offload (~87% of layers), leaves ~9GB VRAM for apps.
-; raise to 99 only when not gaming.
+; ~87% offload; raise to 99 only when not gaming
 ngl = 56
 flash-attn = on
 ; Enable Jinja engine FIRST, then pass the template
 jinja = on
 chat-template-file = @@TEMPLATE@@
+; V3 bundled template
 ; disable reasoning traces so agent tool-call parsers don't choke
 reasoning = off
-; OBLITERAT-ed base is text-only; mmproj would load but can't be
-; used and costs VRAM. Keep commented unless you switch to a
-; genuinely multimodal checkpoint.
-;mmproj = @@MODELS@@\mmproj-model-bf16.gguf
+; enable_thinking OFF
+; greedy decoding
+temperature = 0
+; essential
+repeat-penalty = 1.15
+; max_new_tokens >= 2048
+n-predict = 4096
+; vision on (screenshots)
+mmproj = @@MODELS@@\mmproj-model-bf16.gguf
+; system prompt: send NONE - a system role can reintroduce refusals
 
 ; ------------------------------------------------------------
 ; opencode-agent: same weights, same profile, same single model
