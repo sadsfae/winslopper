@@ -28,6 +28,8 @@
                                      Diffusion WebUI on port 7860, exposes a
                                      simple /sdapi/v1/txt2img API) + desktop
                                      icon stablediffusion.lnk
+      .\Download-Model.ps1           optional: downloads a Stable Diffusion
+                                     checkpoint into sd\...\models\Stable-diffusion
 
     Menu behaviour:
       Option 1 runs llama-server in this same console window: its logs stream
@@ -122,6 +124,7 @@ $batFile  = Join-Path $root "llama-server.bat"
 $menuFile = Join-Path $root "llama-server.ps1"
 $webuiFile = Join-Path $root "setup-webui.ps1"
 $sdFile = Join-Path $root "setup-stablediffusion.ps1"
+$sdDlFile = Join-Path $root "Download-Model.ps1"
 $tmplSha  = "55d4931433fe502b794226ee7f4d206a6bdd436ac9f80eb7d8ebb4c639f9ea0c"
 $svcPort  = 8081
 $ModelsDir = $ModelsDir.TrimEnd("\")
@@ -904,7 +907,7 @@ Write-Ok "python: $pyPath ($ver)"
 # ---------------------------------------------------------------- git clone
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     Write-Warn "git is required to fetch stable-diffusion-webui and was not found."
-    Write-Warn "Install Git for Windows (winget install Git.Git) and re-run."
+    Write-Warn "Install Git for Windows (winget install Git.Git, or git-scm.com/download/win) and re-run."
     exit 1
 }
 New-Item -ItemType Directory -Force -Path $sd | Out-Null
@@ -1071,6 +1074,42 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0stablediffusion.ps1" %
 '@
 [IO.File]::WriteAllText((Join-Path $root "stablediffusion.bat"), ($sdBatText -replace "`r?`n", "`r`n"), (New-Object System.Text.ASCIIEncoding))
 Write-Ok "wrote stablediffusion.bat (opens the stablediffusion menu)"
+$sdDlText = @'
+# Fetch a Stable Diffusion checkpoint into the models folder used by the
+# stablediffusion component. Run this after setup-stablediffusion.ps1 so the
+# stable-diffusion-webui repo exists. Defaults to Stability AI's SD 1.5
+# (open license, ~2 GB). Idempotent: an existing file is kept unless -Force.
+param(
+    [string]$Url = "https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5/resolve/main/v1-5-pruned-emaonly.safetensors",
+    [switch]$Force
+)
+$ErrorActionPreference = "Stop"
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+$ProgressPreference = "SilentlyContinue"
+
+$root   = $PSScriptRoot
+$repo   = Join-Path $root "sd\stable-diffusion-webui"
+$launch = Join-Path $repo "launch.py"
+$models = Join-Path $repo "models\Stable-diffusion"
+if (-not (Test-Path $launch)) {
+    Write-Host "    WARN: stable-diffusion-webui not found. Run .\setup-stablediffusion.ps1 first, then re-run this." -ForegroundColor Yellow
+    exit 1
+}
+New-Item -ItemType Directory -Force -Path $models | Out-Null
+
+$name = Split-Path $Url -Leaf
+$dest = Join-Path $models $name
+if (-not $Force -and (Test-Path $dest)) {
+    Write-Host "    $name already present; skipping. Use -Force to re-download." -ForegroundColor Green
+    exit 0
+}
+Write-Host "    downloading $name (a few GB) from $Url ..."
+Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $dest
+Write-Host "    saved $dest" -ForegroundColor Green
+Write-Host "    start stablediffusion and it will use this model."
+'@
+[IO.File]::WriteAllText($sdDlFile, $sdDlText, (New-Object System.Text.UTF8Encoding($false)))
+Write-Ok "wrote $sdDlFile (optional: downloads a Stable Diffusion checkpoint; run .\Download-Model.ps1)"
 
 if (-not $NoShortcut) {
     $lnkPath = Join-Path ([Environment]::GetFolderPath("Desktop")) "llama-server.lnk"
@@ -1139,7 +1178,7 @@ Write-Host "  Close   : closing the window or Ctrl+C stops the server"
 Write-Host "  Direct  : .\llama-server.ps1 start|stop|restart|status"
 Write-Host "  Health  : http://127.0.0.1:$svcPort/health"
 Write-Host "  WebUI   : optional browser chat with tools - install Python 3.x, run .\setup-webui.ps1, then use the llama-chat icon"
-Write-Host "  SD      : optional simple image API - install Python 3.x, run .\setup-stablediffusion.ps1, then use the stablediffusion icon"
+Write-Host "  SD      : optional simple image API - install Python 3.x, run .\setup-stablediffusion.ps1 then .\Download-Model.ps1, use the stablediffusion icon"
 Write-Host "  Config  : $preset"
 Write-Host "  Upgrade : delete $lockFile and re-run this script to update llama.cpp"
 Write-Host "  Auto-start at logon: put a shortcut to $batFile in shell:startup"

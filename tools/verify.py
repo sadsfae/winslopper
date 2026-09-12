@@ -62,4 +62,7 @@ print("sd menu exact")
 assert extract("sdBatText") == gen.SD_BAT, "sd bat not exact"
 print("sd bat exact")
 
+assert extract("sdDlText") == gen.SD_DOWNLOAD_PS, "sd download model not exact"
+print("sd download model exact")
+
 print("ALL CHECKS PASS")

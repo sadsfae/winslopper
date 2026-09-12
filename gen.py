@@ -407,7 +407,7 @@ Write-Ok "python: $pyPath ($ver)"
 # ---------------------------------------------------------------- git clone
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     Write-Warn "git is required to fetch stable-diffusion-webui and was not found."
-    Write-Warn "Install Git for Windows (winget install Git.Git) and re-run."
+    Write-Warn "Install Git for Windows (winget install Git.Git, or git-scm.com/download/win) and re-run."
     exit 1
 }
 New-Item -ItemType Directory -Force -Path $sd | Out-Null
@@ -569,14 +569,49 @@ cd /d "%~dp0"
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0stablediffusion.ps1" %*
 """
 
+SD_DOWNLOAD_PS = r"""# Fetch a Stable Diffusion checkpoint into the models folder used by the
+# stablediffusion component. Run this after setup-stablediffusion.ps1 so the
+# stable-diffusion-webui repo exists. Defaults to Stability AI's SD 1.5
+# (open license, ~2 GB). Idempotent: an existing file is kept unless -Force.
+param(
+    [string]$Url = "https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5/resolve/main/v1-5-pruned-emaonly.safetensors",
+    [switch]$Force
+)
+$ErrorActionPreference = "Stop"
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+$ProgressPreference = "SilentlyContinue"
+
+$root   = $PSScriptRoot
+$repo   = Join-Path $root "sd\stable-diffusion-webui"
+$launch = Join-Path $repo "launch.py"
+$models = Join-Path $repo "models\Stable-diffusion"
+if (-not (Test-Path $launch)) {
+    Write-Host "    WARN: stable-diffusion-webui not found. Run .\setup-stablediffusion.ps1 first, then re-run this." -ForegroundColor Yellow
+    exit 1
+}
+New-Item -ItemType Directory -Force -Path $models | Out-Null
+
+$name = Split-Path $Url -Leaf
+$dest = Join-Path $models $name
+if (-not $Force -and (Test-Path $dest)) {
+    Write-Host "    $name already present; skipping. Use -Force to re-download." -ForegroundColor Green
+    exit 0
+}
+Write-Host "    downloading $name (a few GB) from $Url ..."
+Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $dest
+Write-Host "    saved $dest" -ForegroundColor Green
+Write-Host "    start stablediffusion and it will use this model."
+"""
+
 assert "'@" not in BAT_LAUNCHER and "'@" not in MENU_PS and "'@" not in WEBUI_SETUP_PS
 assert "'@" not in WEBUI_MENU_PS and "'@" not in WEBUI_BAT
 assert "'@" not in SD_SETUP_PS and "'@" not in SD_MENU_PS and "'@" not in SD_BAT
+assert "'@" not in SD_DOWNLOAD_PS
 assert "'@" not in jinja and "'@" not in ported_ini, "here-string terminator collision"
 assert all(
     ord(c) < 128
     for c in (BAT_LAUNCHER + MENU_PS + WEBUI_SETUP_PS + WEBUI_MENU_PS + WEBUI_BAT
-              + SD_SETUP_PS + SD_MENU_PS + SD_BAT)
+              + SD_SETUP_PS + SD_MENU_PS + SD_BAT + SD_DOWNLOAD_PS)
 ), "menu/launcher/webui/sd must be pure ASCII"
 
 
@@ -596,6 +631,7 @@ webui_bat_var = ps_here_string("webuiBatText", WEBUI_BAT)
 sd_var = ps_here_string("sdText", SD_SETUP_PS)
 sd_menu_var = ps_here_string("sdMenuText", SD_MENU_PS)
 sd_bat_var = ps_here_string("sdBatText", SD_BAT)
+sd_download_var = ps_here_string("sdDlText", SD_DOWNLOAD_PS)
 tmpl_var = ps_here_string("tmplText", jinja)
 preset_var = ps_here_string("presetText", ported_ini)
 
@@ -629,6 +665,8 @@ PS = r"""#Requires -Version 5.1
                                      Diffusion WebUI on port 7860, exposes a
                                      simple /sdapi/v1/txt2img API) + desktop
                                      icon stablediffusion.lnk
+      .\Download-Model.ps1           optional: downloads a Stable Diffusion
+                                     checkpoint into sd\...\models\Stable-diffusion
 
     Menu behaviour:
       Option 1 runs llama-server in this same console window: its logs stream
@@ -723,6 +761,7 @@ $batFile  = Join-Path $root "llama-server.bat"
 $menuFile = Join-Path $root "llama-server.ps1"
 $webuiFile = Join-Path $root "setup-webui.ps1"
 $sdFile = Join-Path $root "setup-stablediffusion.ps1"
+$sdDlFile = Join-Path $root "Download-Model.ps1"
 $tmplSha  = "__TM_PLSHA__"
 $svcPort  = 8081
 $ModelsDir = $ModelsDir.TrimEnd("\")
@@ -901,6 +940,9 @@ Write-Ok "wrote stablediffusion.ps1 (Stable Diffusion WebUI menu: 1=start, 2=sto
 __SD_BAT_PS__
 [IO.File]::WriteAllText((Join-Path $root "stablediffusion.bat"), ($sdBatText -replace "`r?`n", "`r`n"), (New-Object System.Text.ASCIIEncoding))
 Write-Ok "wrote stablediffusion.bat (opens the stablediffusion menu)"
+__SD_DOWNLOAD_PS__
+[IO.File]::WriteAllText($sdDlFile, $sdDlText, (New-Object System.Text.UTF8Encoding($false)))
+Write-Ok "wrote $sdDlFile (optional: downloads a Stable Diffusion checkpoint; run .\Download-Model.ps1)"
 
 if (-not $NoShortcut) {
     $lnkPath = Join-Path ([Environment]::GetFolderPath("Desktop")) "llama-server.lnk"
@@ -969,7 +1011,7 @@ Write-Host "  Close   : closing the window or Ctrl+C stops the server"
 Write-Host "  Direct  : .\llama-server.ps1 start|stop|restart|status"
 Write-Host "  Health  : http://127.0.0.1:$svcPort/health"
 Write-Host "  WebUI   : optional browser chat with tools - install Python 3.x, run .\setup-webui.ps1, then use the llama-chat icon"
-Write-Host "  SD      : optional simple image API - install Python 3.x, run .\setup-stablediffusion.ps1, then use the stablediffusion icon"
+Write-Host "  SD      : optional simple image API - install Python 3.x, run .\setup-stablediffusion.ps1 then .\Download-Model.ps1, use the stablediffusion icon"
 Write-Host "  Config  : $preset"
 Write-Host "  Upgrade : delete $lockFile and re-run this script to update llama.cpp"
 Write-Host "  Auto-start at logon: put a shortcut to $batFile in shell:startup"
@@ -987,6 +1029,7 @@ PS = (
     .replace("__SD_SETUP_PS__", sd_var, 1)
     .replace("__SD_MENU_PS__", sd_menu_var, 1)
     .replace("__SD_BAT_PS__", sd_bat_var, 1)
+    .replace("__SD_DOWNLOAD_PS__", sd_download_var, 1)
     .replace("__TM_PLSHA__", tmpl_sha, 1)
 )
 
