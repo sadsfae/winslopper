@@ -55,4 +55,11 @@ print("bat launcher exact")
 assert extract("menuText") == gen.MENU_PS, "menu not exact"
 print("menu exact")
 
+assert extract("sdText") == gen.SD_SETUP_PS, "sd setup not exact"
+print("sd setup exact")
+assert extract("sdMenuText") == gen.SD_MENU_PS, "sd menu not exact"
+print("sd menu exact")
+assert extract("sdBatText") == gen.SD_BAT, "sd bat not exact"
+print("sd bat exact")
+
 print("ALL CHECKS PASS")
