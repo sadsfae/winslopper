@@ -348,13 +348,235 @@ cd /d "%~dp0"
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0llama-chat.ps1" %*
 """
 
+SD_SETUP_PS = r"""# Optional Stable Diffusion WebUI setup/upgrade: local AUTOMATIC1111
+# stable-diffusion-webui service exposing a simple image generation API
+# (/sdapi/v1/txt2img). Python 3.11/3.12 is a prerequisite (not installed by
+# this script); everything else stays inside the sd\\venv below. Re-running
+# without -Upgrade is a no-op re-check.
+param(
+    [switch]$SkipFirewall,
+    [switch]$Upgrade
+)
+# 'Continue' (not 'Stop'): on PowerShell 5.1 a failing native command's stderr
+# becomes a terminating error under Stop and would kill this script mid-run.
+$ErrorActionPreference = "Continue"
+$root   = $PSScriptRoot
+$sd     = Join-Path $root "sd"
+$repo   = Join-Path $sd "stable-diffusion-webui"
+$venv   = Join-Path $sd "venv"
+$models = Join-Path $repo "models\Stable-diffusion"
+$port   = 7860
+
+function Write-Ok  ([string]$m) { Write-Host "    $m" -ForegroundColor Green }
+function Write-Warn([string]$m) { Write-Host "    WARN: $m" -ForegroundColor Yellow }
+
+# ---------------------------------------------------------------- python
+# Python 3.11 or 3.12 is required (torch on 3.13+ still lags). Prefer the py
+# launcher, skip the Store stub.
+$pyPath = ""
+if (Get-Command py -ErrorAction SilentlyContinue) {
+    $null = py -3.12 -c "import sys" 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        $pyPath = (py -3.12 -c "import sys; print(sys.executable)").Trim()
+    } else {
+        $null = py -3 -c "import sys" 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            $pyPath = (py -3 -c "import sys; print(sys.executable)").Trim()
+        }
+    }
+}
+if (-not $pyPath -and (Get-Command python -ErrorAction SilentlyContinue)) {
+    $p = (python -c "import sys; print(sys.executable)").Trim()
+    if ($p -and ($p -notmatch "WindowsApps")) { $pyPath = $p }
+}
+if (-not $pyPath) {
+    Write-Warn "Python 3.11 or 3.12 is required for Stable Diffusion WebUI and was not found."
+    Write-Warn "Install Python 3.12 (winget install Python.Python.3.12, or from python.org) and re-run."
+    exit 1
+}
+$ver = (& $pyPath -c "import sys; print('%d.%d' % sys.version_info[:2])").Trim()
+if ($ver -notmatch "^3\.1[12]$") {
+    Write-Warn "found python $ver; Stable Diffusion WebUI works best on 3.11/3.12."
+    Write-Warn "Install Python 3.12, delete sd\\venv if it exists, then re-run this script."
+    exit 1
+}
+$pyPath = (Resolve-Path $pyPath).Path
+Write-Ok "python: $pyPath ($ver)"
+
+# ---------------------------------------------------------------- git clone
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    Write-Warn "git is required to fetch stable-diffusion-webui and was not found."
+    Write-Warn "Install Git for Windows (winget install Git.Git) and re-run."
+    exit 1
+}
+New-Item -ItemType Directory -Force -Path $sd | Out-Null
+if (Test-Path (Join-Path $repo ".git")) {
+    Write-Ok "stable-diffusion-webui already cloned"
+    if ($Upgrade) {
+        Write-Host "    pulling latest..."
+        Push-Location $repo
+        try { git pull --ff-only | Out-Null } finally { Pop-Location }
+    }
+} else {
+    Write-Host "    cloning stable-diffusion-webui (a few hundred MB)..."
+    git clone --depth 1 https://github.com/AUTOMATIC1111/stable-diffusion-webui.git $repo
+    if ($LASTEXITCODE -ne 0) { throw "git clone failed" }
+}
+if (-not (Test-Path (Join-Path $repo "launch.py"))) { throw "launch.py not found in $repo" }
+
+# ---------------------------------------------------------------- venv + deps
+$venvPy = Join-Path $venv "Scripts\python.exe"
+if (Test-Path $venvPy) {
+    $vver = (& $venvPy -c "import sys; print('%d.%d' % sys.version_info[:2])").Trim()
+    if ($vver -ne $ver) {
+        Write-Warn "existing sd\\venv uses python $vver; removing it to rebuild with $ver..."
+        Remove-Item $venv -Recurse -Force
+    }
+}
+if (-not (Test-Path $venvPy)) {
+    & $pyPath -m venv $venv
+    if ($LASTEXITCODE -ne 0) { throw "venv creation failed" }
+}
+$vp = Join-Path $venv "Scripts\python.exe"
+& $vp -m pip install --upgrade pip --quiet
+$reqFile = Join-Path $repo "requirements.txt"
+if (-not (Test-Path $reqFile)) {
+    Write-Warn "no requirements.txt in $repo; the WebUI install is incomplete."
+} else {
+    # only install once: an importable torch means the env is ready.
+    $null = & $vp -c "import torch" 2>$null
+    $ready = ($LASTEXITCODE -eq 0)
+    if ($ready -and -not $Upgrade) {
+        Write-Ok "dependencies already installed"
+    } else {
+        Write-Host "    installing requirements (torch is large; this can take a while)..."
+        & $vp -m pip install -r $reqFile
+        if ($LASTEXITCODE -ne 0) { Write-Warn "pip install failed; ensure a CUDA-capable torch is available (see the README)." }
+    }
+}
+New-Item -ItemType Directory -Force -Path $models | Out-Null
+
+# stablediffusion.ps1, stablediffusion.bat and the desktop shortcut are
+# already created by setup-llama-server.ps1; this script only installs the
+# Python service, so nothing else is written here.
+
+# ---------------------------------------------------------------- firewall (7860)
+if (-not $SkipFirewall) {
+    $ruleName = "stablediffusion-$port"
+    $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    $existing = Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
+    if ($existing) {
+        Write-Ok "firewall rule '$ruleName' already present"
+    } elseif ($isAdmin) {
+        New-NetFirewallRule -DisplayName $ruleName -Direction Inbound -Protocol TCP -LocalPort $port -Action Allow -Profile Any | Out-Null
+        Write-Ok "added inbound firewall rule for TCP $port"
+    } else {
+        $helper = Join-Path $env:TEMP "winslopper-sd-firewall.ps1"
+        Set-Content -Path $helper -Value "New-NetFirewallRule -DisplayName '$ruleName' -Direction Inbound -Protocol TCP -LocalPort $port -Action Allow -Profile Any | Out-Null" -Encoding ASCII
+        Write-Host "asking for permission to open inbound TCP $port on the Windows firewall (UAC)..."
+        $elv = Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File',"`"$helper`"" -Wait -PassThru
+        Remove-Item -Path $helper -Force -ErrorAction SilentlyContinue
+        if ($elv.ExitCode -eq 0) {
+            Write-Ok "added inbound firewall rule for TCP $port"
+        } else {
+            Write-Warn "firewall rule not added (UAC declined); add it manually in an elevated PowerShell:"
+            Write-Warn "New-NetFirewallRule -DisplayName stablediffusion-$port -Direction Inbound -Protocol TCP -LocalPort $port -Action Allow -Profile Any"
+        }
+    }
+}
+
+Write-Host ""
+Write-Ok "Stable Diffusion WebUI ready. Start it any time with the stablediffusion desktop icon (or stablediffusion.bat)."
+Write-Ok "Drop a checkpoint (.safetensors or .ckpt) into sd\\stable-diffusion-webui\\models\\Stable-diffusion first."
+Write-Ok "It serves a simple image API at http://<host-ip>:$port (POST /sdapi/v1/txt2img); the browser UI is there too."
+Write-Ok "Close stablediffusion when unused to free its GPU memory."
+Write-Ok "Updating later: run .\\setup-stablediffusion.ps1 -Upgrade, then restart from the menu (2 then 1)."
+"""
+
+SD_MENU_PS = r"""# stablediffusion (Stable Diffusion WebUI) control menu - 1=start, 2=stop, 3=status, 0=exit
+$ErrorActionPreference = "SilentlyContinue"
+$root   = $PSScriptRoot
+$vp     = Join-Path $root "sd\venv\Scripts\python.exe"
+$repo   = Join-Path $root "sd\stable-diffusion-webui"
+$port   = 7860
+
+function Test-SdRunning { return [bool](Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue) }
+function Get-SdProcId {
+    $c = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($c) { return $c.OwningProcess }
+    return $null
+}
+function Start-Sd {
+    if (-not (Test-Path $vp)) { Write-Host "Stable Diffusion WebUI is not installed yet - run setup-stablediffusion.ps1 first"; return }
+    if (Test-SdRunning) { Write-Host "stablediffusion is already running"; return }
+    $launch = Join-Path $repo "launch.py"
+    if (-not (Test-Path $launch)) { Write-Host "launch.py not found - run setup-stablediffusion.ps1 first"; return }
+    Write-Host ""
+    Write-Host "Starting Stable Diffusion WebUI on 0.0.0.0:$port (logs below; close this window or Ctrl+C to stop)..."
+    # surface the failure stream so a crash is visible instead of silently returning
+    $ErrorActionPreference = "Continue"
+    & $vp $launch --api --listen --port $port
+    $ErrorActionPreference = "SilentlyContinue"
+    Write-Host "stablediffusion exited; cleaning up leftover process..."
+    $proc = Get-SdProcId
+    if ($proc) { Stop-Process -Id $proc -Force -ErrorAction SilentlyContinue }
+}
+function Stop-Sd {
+    $proc = Get-SdProcId
+    if ($proc) { Stop-Process -Id $proc -Force -ErrorAction SilentlyContinue }
+    Start-Sleep -Milliseconds 300
+    if (Test-SdRunning) { Write-Host "failed to stop" } else { Write-Host "stopped" }
+}
+function Show-Status {
+    if (Test-SdRunning) {
+        Write-Host "running (open http://127.0.0.1:$port here, or http://<host-ip>:$port from the LAN)"
+    } else {
+        Write-Host "stopped"
+    }
+}
+if ($args.Count -gt 0) {
+    switch ($args[0]) {
+        "start"   { Start-Sd }
+        "stop"    { Stop-Sd }
+        "status"  { Show-Status }
+        default   { Write-Host "usage: stablediffusion.ps1 [start|stop|status]  (no args = menu)" }
+    }
+    exit 0
+}
+while ($true) {
+    Write-Host ""
+    Write-Host "stablediffusion (Stable Diffusion WebUI) on 0.0.0.0:$port"
+    Write-Host "  1) Start - logs stream in this window; closing it stops"
+    Write-Host "  2) Stop"
+    Write-Host "  3) Status"
+    Write-Host "  0) Exit / close window"
+    $k = Read-Host "choose [0-3]"
+    switch ($k) {
+        "1" { Start-Sd }
+        "2" { Stop-Sd }
+        "3" { Show-Status }
+        "0" { exit 0 }
+        default { Write-Host "unknown choice" }
+    }
+}
+"""
+
+SD_BAT = r"""@echo off
+setlocal
+title stablediffusion (Stable Diffusion WebUI)
+cd /d "%~dp0"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0stablediffusion.ps1" %*
+"""
+
 assert "'@" not in BAT_LAUNCHER and "'@" not in MENU_PS and "'@" not in WEBUI_SETUP_PS
 assert "'@" not in WEBUI_MENU_PS and "'@" not in WEBUI_BAT
+assert "'@" not in SD_SETUP_PS and "'@" not in SD_MENU_PS and "'@" not in SD_BAT
 assert "'@" not in jinja and "'@" not in ported_ini, "here-string terminator collision"
 assert all(
     ord(c) < 128
-    for c in (BAT_LAUNCHER + MENU_PS + WEBUI_SETUP_PS + WEBUI_MENU_PS + WEBUI_BAT)
-), "menu/launcher/webui must be pure ASCII"
+    for c in (BAT_LAUNCHER + MENU_PS + WEBUI_SETUP_PS + WEBUI_MENU_PS + WEBUI_BAT
+              + SD_SETUP_PS + SD_MENU_PS + SD_BAT)
+), "menu/launcher/webui/sd must be pure ASCII"
 
 
 def ps_here_string(label, body):
@@ -370,6 +592,9 @@ menu_var = ps_here_string("menuText", MENU_PS)
 webui_var = ps_here_string("webuiText", WEBUI_SETUP_PS)
 webui_menu_var = ps_here_string("webuiMenuText", WEBUI_MENU_PS)
 webui_bat_var = ps_here_string("webuiBatText", WEBUI_BAT)
+sd_var = ps_here_string("sdText", SD_SETUP_PS)
+sd_menu_var = ps_here_string("sdMenuText", SD_MENU_PS)
+sd_bat_var = ps_here_string("sdBatText", SD_BAT)
 tmpl_var = ps_here_string("tmplText", jinja)
 preset_var = ps_here_string("presetText", ported_ini)
 
@@ -397,6 +622,12 @@ PS = r"""#Requires -Version 5.1
                                      Python 3.x, used only in webui\venv)
       .\llama-chat.bat / .ps1        optional llama-chat menu (Open WebUI on
                                      port 8080) + desktop icon llama-chat.lnk
+      .\setup-stablediffusion.ps1    optional: installs Stable Diffusion WebUI
+                                     (needs Python 3.x, used only in sd\venv)
+      .\stablediffusion.bat / .ps1   optional stablediffusion menu (Stable
+                                     Diffusion WebUI on port 7860, exposes a
+                                     simple /sdapi/v1/txt2img API) + desktop
+                                     icon stablediffusion.lnk
 
     Menu behaviour:
       Option 1 runs llama-server in this same console window: its logs stream
@@ -490,6 +721,7 @@ $lockFile = Join-Path $root "REMOVE_ME_TO_UPGRADE"
 $batFile  = Join-Path $root "llama-server.bat"
 $menuFile = Join-Path $root "llama-server.ps1"
 $webuiFile = Join-Path $root "setup-webui.ps1"
+$sdFile = Join-Path $root "setup-stablediffusion.ps1"
 $tmplSha  = "__TM_PLSHA__"
 $svcPort  = 8081
 $ModelsDir = $ModelsDir.TrimEnd("\")
@@ -659,6 +891,16 @@ __WEBUI_BAT_PS__
 [IO.File]::WriteAllText((Join-Path $root "llama-chat.bat"), ($webuiBatText -replace "`r?`n", "`r`n"), (New-Object System.Text.ASCIIEncoding))
 Write-Ok "wrote llama-chat.bat (opens the llama-chat menu)"
 
+__SD_SETUP_PS__
+[IO.File]::WriteAllText($sdFile, $sdText, (New-Object System.Text.UTF8Encoding($false)))
+Write-Ok "wrote $sdFile (optional Stable Diffusion WebUI installer; run it for the simple image API)"
+__SD_MENU_PS__
+[IO.File]::WriteAllText((Join-Path $root "stablediffusion.ps1"), $sdMenuText, (New-Object System.Text.UTF8Encoding($false)))
+Write-Ok "wrote stablediffusion.ps1 (Stable Diffusion WebUI menu: 1=start, 2=stop, 3=status, 0=exit)"
+__SD_BAT_PS__
+[IO.File]::WriteAllText((Join-Path $root "stablediffusion.bat"), ($sdBatText -replace "`r?`n", "`r`n"), (New-Object System.Text.ASCIIEncoding))
+Write-Ok "wrote stablediffusion.bat (opens the stablediffusion menu)"
+
 if (-not $NoShortcut) {
     $lnkPath = Join-Path ([Environment]::GetFolderPath("Desktop")) "llama-server.lnk"
     $ws = New-Object -ComObject WScript.Shell
@@ -678,6 +920,15 @@ if (-not $NoShortcut) {
     $cl.Description = "Open WebUI chat for the llama.cpp router (port 8080)"
     $cl.Save()
     Write-Ok "desktop shortcut: $chatLnk"
+
+    $sdLnk = Join-Path ([Environment]::GetFolderPath("Desktop")) "stablediffusion.lnk"
+    $sl = $ws.CreateShortcut($sdLnk)
+    $sl.TargetPath = Join-Path $root "stablediffusion.bat"
+    $sl.WorkingDirectory = $root
+    $sl.IconLocation = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe,0"
+    $sl.Description = "Stable Diffusion WebUI simple image API (port 7860)"
+    $sl.Save()
+    Write-Ok "desktop shortcut: $sdLnk"
 }
 
 # ---------------------------------------------------------------- firewall
@@ -717,6 +968,7 @@ Write-Host "  Close   : closing the window or Ctrl+C stops the server"
 Write-Host "  Direct  : .\llama-server.ps1 start|stop|restart|status"
 Write-Host "  Health  : http://127.0.0.1:$svcPort/health"
 Write-Host "  WebUI   : optional browser chat with tools - install Python 3.x, run .\setup-webui.ps1, then use the llama-chat icon"
+Write-Host "  SD      : optional simple image API - install Python 3.x, run .\setup-stablediffusion.ps1, then use the stablediffusion icon"
 Write-Host "  Config  : $preset"
 Write-Host "  Upgrade : delete $lockFile and re-run this script to update llama.cpp"
 Write-Host "  Auto-start at logon: put a shortcut to $batFile in shell:startup"
@@ -731,6 +983,9 @@ PS = (
     .replace("__WEBUI_SETUP_PS__", webui_var, 1)
     .replace("__WEBUI_MENU_PS__", webui_menu_var, 1)
     .replace("__WEBUI_BAT_PS__", webui_bat_var, 1)
+    .replace("__SD_SETUP_PS__", sd_var, 1)
+    .replace("__SD_MENU_PS__", sd_menu_var, 1)
+    .replace("__SD_BAT_PS__", sd_bat_var, 1)
     .replace("__TM_PLSHA__", tmpl_sha, 1)
 )
 
