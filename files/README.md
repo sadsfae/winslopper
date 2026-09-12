@@ -16,7 +16,8 @@ SHA-256 below matches before running.
 
 Notes:
 
-- The WebUI components accept Python 3.11 or 3.12. Prefer **3.12** (`python-3.12.9-amd64.exe`); Python 3.13+ is not supported by the WebUI.
+- **Stable Diffusion WebUI** needs Python 3.10 or 3.11 (AUTOMATIC1111's pinned CUDA torch 2.1.2 has no 3.12+ wheels); use `python-3.11.9-amd64.exe`. Python 3.12/3.13 will fail for SD.
+- **Open WebUI** accepts Python 3.11 or 3.12; use `python-3.11.9-amd64.exe` or `python-3.12.9-amd64.exe`.
 - Git for Windows is only required by the **Stable Diffusion** component (it clones the WebUI repo), not the router or Open WebUI.
 - The Python files are about 26 MB each; Git for Windows is about 63 MB.
 - These are the installer files, not the software itself. Run the installer, then re-run the relevant `setup-*.ps1`.
