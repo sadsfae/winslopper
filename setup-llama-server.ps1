@@ -261,9 +261,12 @@ $presetText = @'
 ; same sampling profile. Only the ctx and offload depth differ.
 ;
 ; Windows boot profile is tuned to coexist with OBS replay buffer,
-; EverQuest (P99) and Discord. Ctx 16k keeps the KV cache small
-; (~2.3GB q8) so it lives in system RAM and offload depth is
-; moderate so the game and DWM keep VRAM.
+; EverQuest (P99) and Discord. Ctx 32k doubles the agent's room for
+; tool-call transcripts; the q8 KV cache is ~4.6GB (Qwen3.5: 64 layers
+; x 4 KV heads x 256 head-dim x 2 = 136 KiB/token) and still fits at
+; ngl 56. Offload depth stays moderate so the game and DWM keep VRAM.
+; The model supports 262144 natively; going past ~64k needs
+; kv-offload=off (KV in system RAM) or fewer GPU layers.
 ;
 ; NOTE: paths below are the /mnt/windows mount as seen from the
 ; Linux host. If this file runs natively on Windows, change them
@@ -276,8 +279,8 @@ $presetText = @'
 ; ------------------------------------------------------------
 [omp-agent]
 model = @@MODELS@@\Qwen3.8-27B-OBLITERATED-Q4_K_M.gguf
-; smaller ctx so KV fits alongside running apps
-ctx-size = 16384
+; 2x headroom for tool-call transcripts; still fits alongside running apps
+ctx-size = 32768
 ; ~87% offload; raise to 99 only when not gaming
 ngl = 56
 flash-attn = on
@@ -304,7 +307,7 @@ mmproj = @@MODELS@@\mmproj-model-bf16.gguf
 ; ------------------------------------------------------------
 [opencode-agent]
 model = @@MODELS@@\Qwen3.8-27B-OBLITERATED-Q4_K_M.gguf
-ctx-size = 16384
+ctx-size = 32768
 ngl = 56
 flash-attn = on
 jinja = on
