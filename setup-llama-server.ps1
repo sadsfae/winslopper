@@ -847,8 +847,8 @@ Write-Ok "wrote llama-chat.bat (opens the llama-chat menu)"
 $sdText = @'
 # Optional Stable Diffusion WebUI setup/upgrade: local AUTOMATIC1111
 # stable-diffusion-webui service exposing a simple image generation API
-# (/sdapi/v1/txt2img). Python 3.11/3.12 is a prerequisite (not installed by
-# this script); everything else stays inside the sd\\venv below. Re-running
+# (/sdapi/v1/txt2img). Python 3.10/3.11 is a prerequisite (not installed by
+# this script); everything else stays inside the sd\venv below. Re-running
 # without -Upgrade is a no-op re-check.
 param(
     [switch]$SkipFirewall,
@@ -868,13 +868,14 @@ function Write-Ok  ([string]$m) { Write-Host "    $m" -ForegroundColor Green }
 function Write-Warn([string]$m) { Write-Host "    WARN: $m" -ForegroundColor Yellow }
 
 # ---------------------------------------------------------------- python
-# Python 3.11 or 3.12 is required (torch on 3.13+ still lags). Prefer the py
-# launcher, skip the Store stub.
+# Python 3.10 or 3.11 is supported: AUTOMATIC1111 is tested on 3.10 and its
+# pinned CUDA torch (2.1.2) ships no 3.12+ wheels. Prefer the py launcher,
+# skip the Store stub.
 $pyPath = ""
 if (Get-Command py -ErrorAction SilentlyContinue) {
-    $null = py -3.12 -c "import sys" 2>$null
+    $null = py -3.11 -c "import sys" 2>$null
     if ($LASTEXITCODE -eq 0) {
-        $pyPath = (py -3.12 -c "import sys; print(sys.executable)").Trim()
+        $pyPath = (py -3.11 -c "import sys; print(sys.executable)").Trim()
     } else {
         $null = py -3 -c "import sys" 2>$null
         if ($LASTEXITCODE -eq 0) {
@@ -887,14 +888,14 @@ if (-not $pyPath -and (Get-Command python -ErrorAction SilentlyContinue)) {
     if ($p -and ($p -notmatch "WindowsApps")) { $pyPath = $p }
 }
 if (-not $pyPath) {
-    Write-Warn "Python 3.11 or 3.12 is required for Stable Diffusion WebUI and was not found."
-    Write-Warn "Install Python 3.12 (winget install Python.Python.3.12, or from python.org) and re-run."
+    Write-Warn "Python 3.10 or 3.11 is required for Stable Diffusion WebUI and was not found."
+    Write-Warn "Install Python 3.11 (winget install Python.Python.3.11, or from python.org) and re-run."
     exit 1
 }
 $ver = (& $pyPath -c "import sys; print('%d.%d' % sys.version_info[:2])").Trim()
-if ($ver -notmatch "^3\.1[12]$") {
-    Write-Warn "found python $ver; Stable Diffusion WebUI works best on 3.11/3.12."
-    Write-Warn "Install Python 3.12, delete sd\\venv if it exists, then re-run this script."
+if ($ver -notmatch "^3\.1[01]$") {
+    Write-Warn "found python $ver; Stable Diffusion WebUI supports Python 3.10/3.11 only."
+    Write-Warn "Its pinned CUDA torch (2.1.2) has no 3.12+ wheels; install Python 3.11, delete sd\venv if it exists, then re-run this script."
     exit 1
 }
 $pyPath = (Resolve-Path $pyPath).Path
@@ -926,7 +927,7 @@ $venvPy = Join-Path $venv "Scripts\python.exe"
 if (Test-Path $venvPy) {
     $vver = (& $venvPy -c "import sys; print('%d.%d' % sys.version_info[:2])").Trim()
     if ($vver -ne $ver) {
-        Write-Warn "existing sd\\venv uses python $vver; removing it to rebuild with $ver..."
+        Write-Warn "existing sd\venv uses python $vver; removing it to rebuild with $ver..."
         Remove-Item $venv -Recurse -Force
     }
 }
@@ -984,7 +985,7 @@ if (-not $SkipFirewall) {
 
 Write-Host ""
 Write-Ok "Stable Diffusion WebUI ready. Start it any time with the stablediffusion desktop icon (or stablediffusion.bat)."
-Write-Ok "Drop a checkpoint (.safetensors or .ckpt) into sd\\stable-diffusion-webui\\models\\Stable-diffusion first."
+Write-Ok "Drop a checkpoint (.safetensors or .ckpt) into sd\stable-diffusion-webui\models\Stable-diffusion first."
 Write-Ok "It serves a simple image API at http://<host-ip>:$port (POST /sdapi/v1/txt2img); the browser UI is there too."
 Write-Ok "Close stablediffusion when unused to free its GPU memory."
 Write-Ok "Updating later: run .\\setup-stablediffusion.ps1 -Upgrade, then restart from the menu (2 then 1)."
