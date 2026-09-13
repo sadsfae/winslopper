@@ -947,8 +947,15 @@ $reqFile = Join-Path $repo "requirements.txt"
 if (-not (Test-Path $reqFile)) {
     Write-Warn "no requirements.txt in $repo; the WebUI install is incomplete."
 } else {
-    # only install once: an importable torch means the env is ready.
-    $null = & $vp -c "import torch" 2>$null
+    # ready only when torch imports (and on an NVIDIA GPU) CUDA is usable; a
+    # CPU-only venv left by earlier releases is repaired by this reinstall path.
+    $gpu = Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue |
+           Where-Object { $_.Name -match 'NVIDIA' }
+    if ($gpu) {
+        $null = & $vp -c "import torch; assert torch.cuda.is_available()" 2>$null
+    } else {
+        $null = & $vp -c "import torch" 2>$null
+    }
     $ready = ($LASTEXITCODE -eq 0)
     if ($ready -and -not $Upgrade) {
         Write-Ok "dependencies already installed"
@@ -957,12 +964,10 @@ if (-not (Test-Path $reqFile)) {
         # AUTOMATIC1111's requirements.txt leaves torch unpinned, so pip would
         # otherwise pull the CPU wheel from PyPI and fail the GPU check. On an
         # NVIDIA GPU install the matching CUDA build first (stock for v1.10.x).
-        $gpu = Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue |
-               Where-Object { $_.Name -match 'NVIDIA' }
         if ($gpu) {
             Write-Host "    NVIDIA GPU detected; installing CUDA torch..."
             & $vp -m pip install torch==2.1.2+cu121 torchvision==0.16.2+cu121 --index-url https://download.pytorch.org/whl/cu121
-            if ($LASTEXITCODE -ne 0) { Write-Warn "CUDA torch install failed; the WebUI will fall back to the CPU build." }
+            if ($LASTEXITCODE -ne 0) { throw "CUDA torch install failed; re-run with internet access (download.pytorch.org) or install torch manually into sd\venv." }
         } else {
             Write-Warn "no NVIDIA GPU detected; installing CPU torch (image generation will be slow)."
         }
