@@ -853,7 +853,7 @@ Write-Ok "wrote llama-chat.bat (opens the llama-chat menu)"
 $sdText = @'
 # Optional Stable Diffusion WebUI setup/upgrade: local AUTOMATIC1111
 # stable-diffusion-webui service exposing a simple image generation API
-# (/sdapi/v1/txt2img). Python 3.10/3.11 is a prerequisite (not installed by
+# (/sdapi/v1/txt2img). Python 3.10 is a prerequisite (not installed by
 # this script); everything else stays inside the sd\venv below. Re-running
 # without -Upgrade is a no-op re-check.
 param(
@@ -874,14 +874,14 @@ function Write-Ok  ([string]$m) { Write-Host "    $m" -ForegroundColor Green }
 function Write-Warn([string]$m) { Write-Host "    WARN: $m" -ForegroundColor Yellow }
 
 # ---------------------------------------------------------------- python
-# Python 3.10 or 3.11 is supported: AUTOMATIC1111 is tested on 3.10 and its
-# pinned CUDA torch (2.1.2) ships no 3.12+ wheels. Prefer the py launcher,
-# skip the Store stub.
+# Python 3.10 is supported: AUTOMATIC1111 is tested on 3.10 and its pinned
+# CUDA torch (2.1.2) ships no 3.12+ wheels. Prefer the py launcher, skip the
+# Store stub.
 $pyPath = ""
 if (Get-Command py -ErrorAction SilentlyContinue) {
-    $null = py -3.11 -c "import sys" 2>$null
+    $null = py -3.10 -c "import sys" 2>$null
     if ($LASTEXITCODE -eq 0) {
-        $pyPath = (py -3.11 -c "import sys; print(sys.executable)").Trim()
+        $pyPath = (py -3.10 -c "import sys; print(sys.executable)").Trim()
     } else {
         $null = py -3 -c "import sys" 2>$null
         if ($LASTEXITCODE -eq 0) {
@@ -894,14 +894,14 @@ if (-not $pyPath -and (Get-Command python -ErrorAction SilentlyContinue)) {
     if ($p -and ($p -notmatch "WindowsApps")) { $pyPath = $p }
 }
 if (-not $pyPath) {
-    Write-Warn "Python 3.10 or 3.11 is required for Stable Diffusion WebUI and was not found."
-    Write-Warn "Install Python 3.11 (winget install Python.Python.3.11, or from python.org) and re-run."
+    Write-Warn "Python 3.10 is required for Stable Diffusion WebUI and was not found."
+    Write-Warn "Install Python 3.10 (winget install Python.Python.3.10, or from python.org) and re-run."
     exit 1
 }
 $ver = (& $pyPath -c "import sys; print('%d.%d' % sys.version_info[:2])").Trim()
-if ($ver -notmatch "^3\.1[01]$") {
-    Write-Warn "found python $ver; Stable Diffusion WebUI supports Python 3.10/3.11 only."
-    Write-Warn "Its pinned CUDA torch (2.1.2) has no 3.12+ wheels; install Python 3.11, delete sd\venv if it exists, then re-run this script."
+if ($ver -notmatch "^3\.10$") {
+    Write-Warn "found python $ver; Stable Diffusion WebUI requires Python 3.10."
+    Write-Warn "Its pinned CUDA torch (2.1.2) has no 3.12+ wheels; install Python 3.10, delete sd\venv if it exists, then re-run this script."
     exit 1
 }
 $pyPath = (Resolve-Path $pyPath).Path
@@ -954,6 +954,18 @@ if (-not (Test-Path $reqFile)) {
         Write-Ok "dependencies already installed"
     } else {
         Write-Host "    installing requirements (torch is large; this can take a while)..."
+        # AUTOMATIC1111's requirements.txt leaves torch unpinned, so pip would
+        # otherwise pull the CPU wheel from PyPI and fail the GPU check. On an
+        # NVIDIA GPU install the matching CUDA build first (stock for v1.10.x).
+        $gpu = Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue |
+               Where-Object { $_.Name -match 'NVIDIA' }
+        if ($gpu) {
+            Write-Host "    NVIDIA GPU detected; installing CUDA torch..."
+            & $vp -m pip install torch==2.1.2+cu121 torchvision==0.16.2+cu121 --index-url https://download.pytorch.org/whl/cu121
+            if ($LASTEXITCODE -ne 0) { Write-Warn "CUDA torch install failed; the WebUI will fall back to the CPU build." }
+        } else {
+            Write-Warn "no NVIDIA GPU detected; installing CPU torch (image generation will be slow)."
+        }
         & $vp -m pip install -r $reqFile
         if ($LASTEXITCODE -ne 0) { Write-Warn "pip install failed; ensure a CUDA-capable torch is available (see the README)." }
     }
@@ -1181,7 +1193,7 @@ Write-Host "  Close   : closing the window or Ctrl+C stops the server"
 Write-Host "  Direct  : .\llama-server.ps1 start|stop|restart|status"
 Write-Host "  Health  : http://127.0.0.1:$svcPort/health"
 Write-Host "  WebUI   : optional browser chat with tools - install Python 3.x, run .\setup-webui.ps1, then use the llama-chat icon"
-Write-Host "  SD      : optional simple image API - install Python 3.x, run .\setup-stablediffusion.ps1 then .\Download-Model.ps1, use the stablediffusion icon"
+Write-Host "  SD      : optional simple image API - install Python 3.10, run .\setup-stablediffusion.ps1 then .\Download-Model.ps1, use the stablediffusion icon"
 Write-Host "  Config  : $preset"
 Write-Host "  Upgrade : delete $lockFile and re-run this script to update llama.cpp"
 Write-Host "  Auto-start at logon: put a shortcut to $batFile in shell:startup"
