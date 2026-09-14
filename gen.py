@@ -439,7 +439,17 @@ if (-not (Test-Path $venvPy)) {
     if ($LASTEXITCODE -ne 0) { throw "venv creation failed" }
 }
 $vp = Join-Path $venv "Scripts\python.exe"
-& $vp -m pip install --upgrade pip --quiet
+& $vp -m pip install --upgrade pip wheel --quiet
+# setuptools<82 still bundles pkg_resources; newer versions drop it, and the
+# WebUI builds openai/CLIP and open_clip from source with pip build isolation,
+# which then fails with: No module named 'pkg_resources'.
+& $vp -m pip install --quiet "setuptools<82"
+# Pre-build those two source packages (with --no-build-isolation) so they are
+# importable and the WebUI skips its own (failing) builds of them at first launch.
+& $vp -m pip install --no-build-isolation --quiet "https://github.com/openai/CLIP/archive/d50d76daa670286dd6cacf3bcd80b5e4823fc8e1.zip"
+if ($LASTEXITCODE -ne 0) { Write-Warn "CLIP pre-build failed; the WebUI will retry it." }
+& $vp -m pip install --no-build-isolation --quiet "https://github.com/mlfoundations/open_clip/archive/bb6e834e9c70d9c27d0dc3ecedeebeaeb1ffad6b.zip"
+if ($LASTEXITCODE -ne 0) { Write-Warn "open_clip pre-build failed; the WebUI will retry it." }
 $reqFile = Join-Path $repo "requirements.txt"
 if (-not (Test-Path $reqFile)) {
     Write-Warn "no requirements.txt in $repo; the WebUI install is incomplete."
@@ -503,9 +513,21 @@ if (-not $SkipFirewall) {
     }
 }
 
+# ---------------------------------------------------------------- checkpoint
+$ckpt  = Join-Path $models "RealVisXL_V5.0_fp16.safetensors"
+if (-not (Test-Path $ckpt)) {
+    Write-Host "    downloading RealVisXL V5.0 (SDXL photorealism, ~7 GB, baked VAE)..."
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    $ProgressPreference = "SilentlyContinue"
+    Invoke-WebRequest -UseBasicParsing -Uri "https://huggingface.co/SG161222/RealVisXL_V5.0/resolve/main/RealVisXL_V5.0_fp16.safetensors" -OutFile $ckpt
+    Write-Ok "downloaded checkpoint: $(Split-Path $ckpt -Leaf)"
+} else {
+    Write-Ok "checkpoint already present: $(Split-Path $ckpt -Leaf)"
+}
+
 Write-Host ""
 Write-Ok "Stable Diffusion WebUI ready. Start it any time with the stablediffusion desktop icon (or stablediffusion.bat)."
-Write-Ok "Drop a checkpoint (.safetensors or .ckpt) into sd\stable-diffusion-webui\models\Stable-diffusion first."
+Write-Ok "Default checkpoint: RealVisXL V5.0 (SDXL). Drop any other .safetensors/.ckpt into sd\stable-diffusion-webui\models\Stable-diffusion."
 Write-Ok "It serves a simple image API at http://<host-ip>:$port (POST /sdapi/v1/txt2img); the browser UI is there too."
 Write-Ok "Close stablediffusion when unused to free its GPU memory."
 Write-Ok "Updating later: run .\\setup-stablediffusion.ps1 -Upgrade, then restart from the menu (2 then 1)."
@@ -588,10 +610,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0stablediffusion.ps1" %
 
 SD_DOWNLOAD_PS = r"""# Fetch a Stable Diffusion checkpoint into the models folder used by the
 # stablediffusion component. Run this after setup-stablediffusion.ps1 so the
-# stable-diffusion-webui repo exists. Defaults to Stability AI's SD 1.5
-# (open license, ~2 GB). Idempotent: an existing file is kept unless -Force.
+# stable-diffusion-webui repo exists. Defaults to RealVisXL V5.0 (SDXL,
+# photorealism, ~7 GB, baked VAE). Idempotent: an existing file is kept unless -Force.
 param(
-    [string]$Url = "https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5/resolve/main/v1-5-pruned-emaonly.safetensors",
+    [string]$Url = "https://huggingface.co/SG161222/RealVisXL_V5.0/resolve/main/RealVisXL_V5.0_fp16.safetensors",
     [switch]$Force
 )
 $ErrorActionPreference = "Stop"
@@ -1028,7 +1050,7 @@ Write-Host "  Close   : closing the window or Ctrl+C stops the server"
 Write-Host "  Direct  : .\llama-server.ps1 start|stop|restart|status"
 Write-Host "  Health  : http://127.0.0.1:$svcPort/health"
 Write-Host "  WebUI   : optional browser chat with tools - install Python 3.x, run .\setup-webui.ps1, then use the llama-chat icon"
-Write-Host "  SD      : optional simple image API - install Python 3.10, run .\setup-stablediffusion.ps1 then .\Download-Model.ps1, use the stablediffusion icon"
+Write-Host "  SD      : optional simple image API - install Python 3.10, run .\setup-stablediffusion.ps1 (downloads RealVisXL V5.0), use the stablediffusion icon"
 Write-Host "  Config  : $preset"
 Write-Host "  Upgrade : delete $lockFile and re-run this script to update llama.cpp"
 Write-Host "  Auto-start at logon: put a shortcut to $batFile in shell:startup"
