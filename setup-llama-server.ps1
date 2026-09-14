@@ -1115,6 +1115,10 @@ function Start-Sd {
     Write-Host "Starting Stable Diffusion WebUI on 0.0.0.0:$port (logs below; close this window or Ctrl+C to stop)..."
     # surface the failure stream so a crash is visible instead of silently returning
     $ErrorActionPreference = "Continue"
+    # Stability-AI/stablediffusion went private (Dec 2025), so A1111's first-launch
+    # clone of it fails with 'Repository not found'/auth prompt. Point it at the
+    # public w-e-w mirror the A1111 dev branch uses (the pinned commit hash is kept).
+    $env:STABLE_DIFFUSION_REPO = "https://github.com/w-e-w/stablediffusion.git"
     & $vp $launch --api --listen --port $port
     $ErrorActionPreference = "SilentlyContinue"
     Write-Host "stablediffusion exited; cleaning up leftover process..."
