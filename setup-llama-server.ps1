@@ -256,17 +256,23 @@ $presetText = @'
 ; ============================================================
 ; winslopper router-config.ini  (Windows host .123)
 ;
-; Standardized on Qwen3.8-27B-OBLITERATED for BOTH hosts so the
-; fallback is behaviorally identical: same weights, same template,
-; same sampling profile. Only the ctx and offload depth differ.
+; Model: Swift-Qwen3.8-27B. Swift is a reasoning-efficient fine-tune
+; of Qwen3.8-27B (ukisai/Swift-Qwen3.8-27b): ~26-58% fewer thinking
+; tokens with near-identical accuracy and a small codegen edge
+; (~+5pp LiveCodeBench). The same model runs on the Linux host (.188)
+; behind the omp-swift-agent label, so behavior is consistent across
+; both boxes.
 ;
-; Windows boot profile is tuned to coexist with OBS replay buffer,
-; EverQuest (P99) and Discord. Ctx 32k doubles the agent's room for
-; tool-call transcripts; the q8 KV cache is ~4.6GB (Qwen3.5: 64 layers
-; x 4 KV heads x 256 head-dim x 2 = 136 KiB/token) and still fits at
-; ngl 56. Offload depth stays moderate so the game and DWM keep VRAM.
-; The model supports 262144 natively; going past ~64k needs
-; kv-offload=off (KV in system RAM) or fewer GPU layers.
+; This Windows profile is tuned DOWN to coexist with the box's runtime
+; load (OBS replay buffer, EverQuest P99, Discord, GINA, nparse). Same
+; 24GB card as .188 but dual-boot with the game/streaming stack sharing
+; VRAM: ctx 64k, ngl 56 (partial CPU offload), q4_0 KV cache, and the
+; smaller Q3_K_M quant all trade a little quality/context for headroom.
+;
+; MTP multi-token prediction is on (Swift ships the MTP head in the main
+; GGUF, no separate draft file): ~+40-47% decode on a 3090 Ti. Requires a
+; llama.cpp build with --spec-type draft-mtp (0.4.0+). If the pinned
+; Windows build lacks it, drop the three spec-type/spec-draft-* lines.
 ;
 ; NOTE: paths below are the /mnt/windows mount as seen from the
 ; Linux host. If this file runs natively on Windows, change them
@@ -275,48 +281,97 @@ $presetText = @'
 ; ============================================================
 
 ; ------------------------------------------------------------
-; Primary agent model: SAME qwen as Linux, Windows profile
+; Primary agent model (omp): Swift, Windows profile
 ; ------------------------------------------------------------
 [omp-agent]
-model = @@MODELS@@\Qwen3.8-27B-OBLITERATED-Q4_K_M.gguf
+model = @@MODELS@@\Swift-Qwen3.8-27B-Q3_K_M.gguf
 ; 2x headroom for tool-call transcripts; still fits alongside running apps
-ctx-size = 32768
+ctx-size = 65536
 ; ~87% offload; raise to 99 only when not gaming
 ngl = 56
 flash-attn = on
 ; Enable Jinja engine FIRST, then pass the template
 jinja = on
 chat-template-file = @@TEMPLATE@@
-; V3 bundled template
 ; disable reasoning traces so agent tool-call parsers don't choke
 reasoning = off
-; enable_thinking OFF
-; greedy decoding
-temperature = 0
-; essential
-repeat-penalty = 1.15
+; Swift card sampling (card: temp 1.0, top_p 0.95, top_k 20, min_p 0,
+; presence 0, rep 1). For strict greedy set temperature = 0 and
+; repeat-penalty = 1.15 (the previous OBLITERATED agent tuning).
+temperature = 1.0
+top-k = 20
+top-p = 0.95
+min-p = 0
+presence-penalty = 0
+repeat-penalty = 1.0
 ; max_new_tokens >= 2048
-n-predict = 4096
-; vision on (screenshots)
-mmproj = @@MODELS@@\mmproj-model-bf16.gguf
+n-predict = 8192
+; q4_0 KV keeps the hybrid's footprint small under load
+cache-type-k = q4_0
+cache-type-v = q4_0
+; MTP: Swift's built-in head, no separate draft model
+spec-type = draft-mtp
+spec-draft-n-max = 3
+spec-draft-p-min = 0.75
+; vision on (screenshots) - Swift-specific projector
+mmproj = @@MODELS@@\mmproj-Swift-Qwen3.8-27B-F16.gguf
 ; system prompt: send NONE - a system role can reintroduce refusals
 
 ; ------------------------------------------------------------
-; opencode-agent: same weights, same profile, same single model
-; loaded. Two names but one file, so no load-swap cost.
+; Swift alias label, named identically to the Linux omp-swift-agent
+; so the liteLLM router can point .188 and .123 at the same model.
 ; ------------------------------------------------------------
-[opencode-agent]
-model = @@MODELS@@\Qwen3.8-27B-OBLITERATED-Q4_K_M.gguf
-ctx-size = 32768
+[omp-swift-agent]
+model = @@MODELS@@\Swift-Qwen3.8-27B-Q3_K_M.gguf
+ctx-size = 65536
 ngl = 56
 flash-attn = on
 jinja = on
 chat-template-file = @@TEMPLATE@@
 reasoning = off
+temperature = 1.0
+top-k = 20
+top-p = 0.95
+min-p = 0
+presence-penalty = 0
+repeat-penalty = 1.0
+n-predict = 8192
+cache-type-k = q4_0
+cache-type-v = q4_0
+spec-type = draft-mtp
+spec-draft-n-max = 3
+spec-draft-p-min = 0.75
+mmproj = @@MODELS@@\mmproj-Swift-Qwen3.8-27B-F16.gguf
+
+; ------------------------------------------------------------
+; opencode-agent: same weights, same profile, same single model
+; loaded. Another name for the same file, so no load-swap cost.
+; ------------------------------------------------------------
+[opencode-agent]
+model = @@MODELS@@\Swift-Qwen3.8-27B-Q3_K_M.gguf
+ctx-size = 65536
+ngl = 56
+flash-attn = on
+jinja = on
+chat-template-file = @@TEMPLATE@@
+reasoning = off
+temperature = 1.0
+top-k = 20
+top-p = 0.95
+min-p = 0
+presence-penalty = 0
+repeat-penalty = 1.0
+n-predict = 8192
+cache-type-k = q4_0
+cache-type-v = q4_0
+spec-type = draft-mtp
+spec-draft-n-max = 3
+spec-draft-p-min = 0.75
+mmproj = @@MODELS@@\mmproj-Swift-Qwen3.8-27B-F16.gguf
 
 ; ------------------------------------------------------------
 ; OPTIONAL extra flavors. Loaded on demand only, and each load
-; swaps out the Qwen slot, so only use when you actually want
+; swaps out the Swift slot, so only use when you actually want
 ; that personality. Not part of the agent fallback path.
 ; ------------------------------------------------------------
 
