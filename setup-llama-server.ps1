@@ -266,8 +266,8 @@ $presetText = @'
 ; This Windows profile is tuned DOWN to coexist with the box's runtime
 ; load (OBS replay buffer, EverQuest P99, Discord, GINA, nparse). Same
 ; 24GB card as .188 but dual-boot with the game/streaming stack sharing
-; VRAM: ctx 64k, ngl 56 (partial CPU offload), q4_0 KV cache, and the
-; smaller Q3_K_M quant all trade a little quality/context for headroom.
+; VRAM: ctx 64k, ngl 56 (partial CPU offload), and q4_0 KV cache trade a
+; little context/offload for headroom. Quant matches the Linux host (Q4_K_M).
 ;
 ; MTP multi-token prediction is on (Swift ships the MTP head in the main
 ; GGUF, no separate draft file): ~+40-47% decode on a 3090 Ti. Requires a
@@ -284,7 +284,7 @@ $presetText = @'
 ; Primary agent model (omp): Swift, Windows profile
 ; ------------------------------------------------------------
 [omp-agent]
-model = @@MODELS@@\Swift-Qwen3.8-27B-Q3_K_M.gguf
+model = @@MODELS@@\Swift-Qwen3.8-27B-Q4_K_M.gguf
 ; 2x headroom for tool-call transcripts; still fits alongside running apps
 ctx-size = 65536
 ; ~87% offload; raise to 99 only when not gaming
@@ -322,7 +322,7 @@ mmproj = @@MODELS@@\mmproj-Swift-Qwen3.8-27B-F16.gguf
 ; so the liteLLM router can point .188 and .123 at the same model.
 ; ------------------------------------------------------------
 [omp-swift-agent]
-model = @@MODELS@@\Swift-Qwen3.8-27B-Q3_K_M.gguf
+model = @@MODELS@@\Swift-Qwen3.8-27B-Q4_K_M.gguf
 ctx-size = 65536
 ngl = 56
 flash-attn = on
@@ -348,7 +348,7 @@ mmproj = @@MODELS@@\mmproj-Swift-Qwen3.8-27B-F16.gguf
 ; loaded. Another name for the same file, so no load-swap cost.
 ; ------------------------------------------------------------
 [opencode-agent]
-model = @@MODELS@@\Swift-Qwen3.8-27B-Q3_K_M.gguf
+model = @@MODELS@@\Swift-Qwen3.8-27B-Q4_K_M.gguf
 ctx-size = 65536
 ngl = 56
 flash-attn = on
