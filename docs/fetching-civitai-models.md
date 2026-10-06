@@ -40,9 +40,9 @@ revocation endpoints intermittently drop.
 
 AUTOMATIC1111 exposes `POST /sdapi/v1/txt2img`. The checkpoint is chosen per-request via
 `override_settings.sd_model_checkpoint` in the JSON body (set to the exact filename, e.g.
-`novaComicXL_v20.safetensors`). So you only need the file present in
-`models\Stable-diffusion` — a batch/generator names it via the API rather than you
-hard-pinning a safetensors in the WebUI config.
+the version filename from the `modelVersions[].files[].name` field). So you only need the
+file present in `models\Stable-diffusion` — a batch/generator names it via the API rather
+than you hard-pinning a safetensors in the WebUI config.
 
 ## Getting the `modelVersionId`
 
